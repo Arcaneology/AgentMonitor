@@ -11,6 +11,7 @@ struct MonitoredService: Identifiable, Hashable, Sendable {
     let displayName: String
     let kind: Kind
     let projectRoot: URL?
+    let launchAgentLabel: String?
     let processes: [MonitoredProcess]
     let endpoints: [ListeningEndpoint]
 
@@ -18,4 +19,3 @@ struct MonitoredService: Identifiable, Hashable, Sendable {
         processes.reduce(0) { $0 + $1.memoryBytes }
     }
 }
-

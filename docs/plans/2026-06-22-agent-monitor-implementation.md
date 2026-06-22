@@ -51,6 +51,8 @@ xcodebuild -project AgentMonitor.xcodeproj -scheme AgentMonitor \
 
 ## 阶段 3：项目识别与服务归并
 
+状态：已完成
+
 输出：
 
 - 项目根目录查找和 manifest 名称解析。

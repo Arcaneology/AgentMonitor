@@ -18,11 +18,15 @@
 		A10700000000000000000001 /* LsofPortCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10700000000000000000001 /* LsofPortCollector.swift */; };
 		A10800000000000000000001 /* DarwinProcessCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10800000000000000000001 /* DarwinProcessCollector.swift */; };
 		A10900000000000000000001 /* LaunchAgentCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10900000000000000000001 /* LaunchAgentCollector.swift */; };
+		A11000000000000000000001 /* ProjectResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11000000000000000000001 /* ProjectResolver.swift */; };
+		A11100000000000000000001 /* ServiceDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11100000000000000000001 /* ServiceDiscovery.swift */; };
 		A20100000000000000000001 /* LsofFieldParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20100000000000000000001 /* LsofFieldParserTests.swift */; };
 		A20200000000000000000001 /* SystemCommandRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20300000000000000000001 /* SystemCommandRunnerTests.swift */; };
 		A20300000000000000000001 /* LsofPortCollectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20400000000000000000001 /* LsofPortCollectorTests.swift */; };
 		A20400000000000000000001 /* DarwinProcessCollectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20500000000000000000001 /* DarwinProcessCollectorTests.swift */; };
 		A20500000000000000000001 /* LaunchAgentCollectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20600000000000000000001 /* LaunchAgentCollectorTests.swift */; };
+		A20600000000000000000001 /* ProjectResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20700000000000000000001 /* ProjectResolverTests.swift */; };
+		A20700000000000000000001 /* ServiceDiscoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20800000000000000000001 /* ServiceDiscoveryTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -48,12 +52,16 @@
 		B10700000000000000000001 /* LsofPortCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LsofPortCollector.swift; sourceTree = "<group>"; };
 		B10800000000000000000001 /* DarwinProcessCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DarwinProcessCollector.swift; sourceTree = "<group>"; };
 		B10900000000000000000001 /* LaunchAgentCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAgentCollector.swift; sourceTree = "<group>"; };
+		B11000000000000000000001 /* ProjectResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectResolver.swift; sourceTree = "<group>"; };
+		B11100000000000000000001 /* ServiceDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceDiscovery.swift; sourceTree = "<group>"; };
 		B20100000000000000000001 /* LsofFieldParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LsofFieldParserTests.swift; sourceTree = "<group>"; };
 		B20200000000000000000001 /* AgentMonitorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AgentMonitorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20300000000000000000001 /* SystemCommandRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemCommandRunnerTests.swift; sourceTree = "<group>"; };
 		B20400000000000000000001 /* LsofPortCollectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LsofPortCollectorTests.swift; sourceTree = "<group>"; };
 		B20500000000000000000001 /* DarwinProcessCollectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DarwinProcessCollectorTests.swift; sourceTree = "<group>"; };
 		B20600000000000000000001 /* LaunchAgentCollectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAgentCollectorTests.swift; sourceTree = "<group>"; };
+		B20700000000000000000001 /* ProjectResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectResolverTests.swift; sourceTree = "<group>"; };
+		B20800000000000000000001 /* ServiceDiscoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceDiscoveryTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -109,6 +117,7 @@
 				C10300000000000000000001 /* Ports */,
 				C10400000000000000000001 /* Collectors */,
 				C10500000000000000000001 /* System */,
+				C10600000000000000000001 /* Discovery */,
 			);
 			path = AgentMonitor/Core;
 			sourceTree = "<group>";
@@ -150,6 +159,15 @@
 			path = System;
 			sourceTree = "<group>";
 		};
+		C10600000000000000000001 /* Discovery */ = {
+			isa = PBXGroup;
+			children = (
+				B11000000000000000000001 /* ProjectResolver.swift */,
+				B11100000000000000000001 /* ServiceDiscovery.swift */,
+			);
+			path = Discovery;
+			sourceTree = "<group>";
+		};
 		C20100000000000000000001 /* AgentMonitorTests */ = {
 			isa = PBXGroup;
 			children = (
@@ -158,6 +176,8 @@
 				B20400000000000000000001 /* LsofPortCollectorTests.swift */,
 				B20500000000000000000001 /* DarwinProcessCollectorTests.swift */,
 				B20600000000000000000001 /* LaunchAgentCollectorTests.swift */,
+				B20700000000000000000001 /* ProjectResolverTests.swift */,
+				B20800000000000000000001 /* ServiceDiscoveryTests.swift */,
 			);
 			path = AgentMonitorTests;
 			sourceTree = "<group>";
@@ -271,6 +291,8 @@
 				A10700000000000000000001 /* LsofPortCollector.swift in Sources */,
 				A10800000000000000000001 /* DarwinProcessCollector.swift in Sources */,
 				A10900000000000000000001 /* LaunchAgentCollector.swift in Sources */,
+				A11000000000000000000001 /* ProjectResolver.swift in Sources */,
+				A11100000000000000000001 /* ServiceDiscovery.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -283,6 +305,8 @@
 				A20300000000000000000001 /* LsofPortCollectorTests.swift in Sources */,
 				A20400000000000000000001 /* DarwinProcessCollectorTests.swift in Sources */,
 				A20500000000000000000001 /* LaunchAgentCollectorTests.swift in Sources */,
+				A20600000000000000000001 /* ProjectResolverTests.swift in Sources */,
+				A20700000000000000000001 /* ServiceDiscoveryTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
