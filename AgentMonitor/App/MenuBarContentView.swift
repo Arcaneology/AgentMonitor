@@ -4,7 +4,12 @@ import SwiftUI
 struct MenuBarContentView: View {
     @ObservedObject var store: MonitorStore
     @State private var serviceToStop: MonitoredService?
-    @State private var actionAlert: ActionAlert?
+    @State private var actionPrompt: ActionPrompt?
+
+    init(store: MonitorStore, serviceToStop: MonitoredService? = nil) {
+        self.store = store
+        _serviceToStop = State(initialValue: serviceToStop)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -17,49 +22,19 @@ struct MenuBarContentView: View {
                 content
             }
 
+            if let serviceToStop {
+                Divider()
+                stopConfirmation(for: serviceToStop)
+            } else if let actionPrompt {
+                Divider()
+                actionPanel(for: actionPrompt)
+            }
+
             Divider()
             footer
         }
         .frame(width: 420)
         .background(.regularMaterial)
-        .confirmationDialog(
-            "停止服务？",
-            isPresented: Binding(
-                get: { serviceToStop != nil },
-                set: { if !$0 { serviceToStop = nil } }
-            ),
-            titleVisibility: .visible,
-            presenting: serviceToStop
-        ) { service in
-            Button("停止", role: .destructive) {
-                serviceToStop = nil
-                Task { await stop(service) }
-            }
-            Button("取消", role: .cancel) {
-                serviceToStop = nil
-            }
-        } message: { service in
-            Text(stopImpact(for: service))
-        }
-        .alert(item: $actionAlert) { alert in
-            switch alert {
-            case .force(let service, let pids):
-                Alert(
-                    title: Text("服务仍在运行"),
-                    message: Text("PID \(pids.map(String.init).joined(separator: ", ")) 未响应 SIGTERM。强制结束可能导致未保存的数据丢失。"),
-                    primaryButton: .destructive(Text("强制结束")) {
-                        Task { await forceStop(service) }
-                    },
-                    secondaryButton: .cancel()
-                )
-            case .error(let message):
-                Alert(
-                    title: Text("操作失败"),
-                    message: Text(message),
-                    dismissButton: .default(Text("好"))
-                )
-            }
-        }
     }
 
     private var header: some View {
@@ -194,6 +169,84 @@ struct MenuBarContentView: View {
         .padding(.vertical, 10)
     }
 
+    private func stopConfirmation(for service: MonitoredService) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text("停止 \(service.displayName)？")
+                .font(.subheadline.weight(.semibold))
+            Text(stopImpact(for: service))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Spacer()
+                Button("取消") {
+                    serviceToStop = nil
+                }
+                .buttonStyle(.bordered)
+
+                Button("停止", role: .destructive) {
+                    serviceToStop = nil
+                    Task { await stop(service) }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    @ViewBuilder
+    private func actionPanel(for prompt: ActionPrompt) -> some View {
+        switch prompt {
+        case .force(let service, let pids):
+            VStack(alignment: .leading, spacing: 9) {
+                Text("服务仍在运行")
+                    .font(.subheadline.weight(.semibold))
+                Text("PID \(pids.map(String.init).joined(separator: ", ")) 未响应 SIGTERM。强制结束可能导致未保存的数据丢失。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                HStack {
+                    Spacer()
+                    Button("取消") {
+                        actionPrompt = nil
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button("强制结束", role: .destructive) {
+                        actionPrompt = nil
+                        Task { await forceStop(service) }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+
+        case .error(let message):
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.yellow)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("操作失败")
+                        .font(.subheadline.weight(.semibold))
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("好") {
+                    actionPrompt = nil
+                }
+                .buttonStyle(.bordered)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+        }
+    }
+
     private var updatedText: String {
         guard store.snapshot.collectedAt != .distantPast else { return "尚未刷新" }
         let duration = Int(store.snapshot.collectionDuration * 1_000)
@@ -232,23 +285,16 @@ struct MenuBarContentView: View {
         case .stopped:
             break
         case .requiresForce(let pids):
-            actionAlert = .force(service, pids)
+            actionPrompt = .force(service, pids)
         case .failed(let message):
-            actionAlert = .error(message)
+            actionPrompt = .error(message)
         }
     }
 }
 
-private enum ActionAlert: Identifiable {
+private enum ActionPrompt {
     case force(MonitoredService, [Int32])
     case error(String)
-
-    var id: String {
-        switch self {
-        case .force(let service, _): "force:\(service.id)"
-        case .error(let message): "error:\(message)"
-        }
-    }
 }
 
 private struct MetricCard: View {

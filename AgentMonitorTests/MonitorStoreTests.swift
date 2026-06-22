@@ -37,23 +37,7 @@ final class MonitorStoreTests: XCTestCase {
     }
 
     func testMenuContentReservesRoomForServiceRows() async {
-        let process = MonitoredProcess(
-            id: ProcessIdentity(pid: 42, startTime: Date(timeIntervalSince1970: 42)),
-            ownerUID: 501,
-            executablePath: "/usr/bin/node",
-            arguments: [],
-            workingDirectory: URL(fileURLWithPath: "/tmp/example", isDirectory: true),
-            memoryBytes: 32 * 1_024 * 1_024
-        )
-        let service = MonitoredService(
-            id: "example",
-            displayName: "Example Project",
-            kind: .localProject,
-            projectRoot: process.workingDirectory,
-            launchAgentLabel: nil,
-            processes: [process],
-            endpoints: [ListeningEndpoint(address: "127.0.0.1", port: 3_000, transport: .tcp)]
-        )
+        let service = makeExampleService()
         let snapshot = MonitorSnapshot(
             services: [service],
             issues: [],
@@ -68,6 +52,51 @@ final class MonitorStoreTests: XCTestCase {
 
         let height = hostingView.fittingSize.height
         XCTAssertGreaterThanOrEqual(height, 450, "Menu fitting height was \(height)")
+    }
+
+    func testStopConfirmationIsRenderedInsideMenuContent() async {
+        let service = makeExampleService()
+        let snapshot = MonitorSnapshot(
+            services: [service],
+            issues: [],
+            collectedAt: Date(),
+            collectionDuration: 0.04
+        )
+        let store = MonitorStore(discoverer: StaticDiscoverer(snapshot: snapshot))
+        await store.refresh()
+
+        let regularView = NSHostingView(rootView: MenuBarContentView(store: store))
+        let confirmationView = NSHostingView(rootView: MenuBarContentView(
+            store: store,
+            serviceToStop: service
+        ))
+        regularView.layoutSubtreeIfNeeded()
+        confirmationView.layoutSubtreeIfNeeded()
+
+        XCTAssertGreaterThan(
+            confirmationView.fittingSize.height,
+            regularView.fittingSize.height + 40
+        )
+    }
+
+    private func makeExampleService() -> MonitoredService {
+        let process = MonitoredProcess(
+            id: ProcessIdentity(pid: 42, startTime: Date(timeIntervalSince1970: 42)),
+            ownerUID: 501,
+            executablePath: "/usr/bin/node",
+            arguments: [],
+            workingDirectory: URL(fileURLWithPath: "/tmp/example", isDirectory: true),
+            memoryBytes: 32 * 1_024 * 1_024
+        )
+        return MonitoredService(
+            id: "example",
+            displayName: "Example Project",
+            kind: .localProject,
+            projectRoot: process.workingDirectory,
+            launchAgentLabel: nil,
+            processes: [process],
+            endpoints: [ListeningEndpoint(address: "127.0.0.1", port: 3_000, transport: .tcp)]
+        )
     }
 }
 
