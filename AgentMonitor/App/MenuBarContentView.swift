@@ -5,6 +5,7 @@ struct MenuBarContentView: View {
     @ObservedObject var store: MonitorStore
     @State private var serviceToStop: MonitoredService?
     @State private var actionPrompt: ActionPrompt?
+    @State private var sortOrder: ServiceSortOrder = .nameAscending
 
     init(store: MonitorStore, serviceToStop: MonitoredService? = nil) {
         self.store = store
@@ -123,13 +124,21 @@ struct MenuBarContentView: View {
 
     @ViewBuilder
     private func serviceSection(kind: MonitoredService.Kind, title: String) -> some View {
-        let services = store.services.filter { $0.kind == kind }
+        let services = sortOrder.sorted(store.services.filter { $0.kind == kind })
         if !services.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
-                Text(title.uppercased())
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .tracking(0.6)
+                HStack {
+                    Text(title.uppercased())
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .tracking(0.6)
+
+                    Spacer()
+
+                    if firstVisibleKind == kind {
+                        sortMenu
+                    }
+                }
 
                 ForEach(services) { service in
                     ServiceRow(
@@ -140,6 +149,39 @@ struct MenuBarContentView: View {
                 }
             }
         }
+    }
+
+    private var firstVisibleKind: MonitoredService.Kind? {
+        [.localProject, .launchAgent, .userProcess].first { kind in
+            store.services.contains { $0.kind == kind }
+        }
+    }
+
+    private var sortMenu: some View {
+        Menu {
+            ForEach(ServiceSortOrder.allCases) { order in
+                Button {
+                    sortOrder = order
+                } label: {
+                    HStack {
+                        Text(order.title)
+                        if sortOrder == order {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            Label(sortOrder.shortTitle, systemImage: "arrow.up.arrow.down")
+                .font(.caption)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(.quaternary.opacity(0.7), in: Capsule())
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .accessibilityLabel("排序方式：\(sortOrder.title)")
+        .help("排序服务")
     }
 
     private var emptyState: some View {
@@ -289,6 +331,66 @@ struct MenuBarContentView: View {
         case .failed(let message):
             actionPrompt = .error(message)
         }
+    }
+}
+
+enum ServiceSortOrder: String, CaseIterable, Identifiable {
+    case nameAscending
+    case nameDescending
+    case memoryDescending
+    case memoryAscending
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .nameAscending: "名称：A 到 Z"
+        case .nameDescending: "名称：Z 到 A"
+        case .memoryDescending: "内存：高到低"
+        case .memoryAscending: "内存：低到高"
+        }
+    }
+
+    var shortTitle: String {
+        switch self {
+        case .nameAscending: "名称 ↑"
+        case .nameDescending: "名称 ↓"
+        case .memoryDescending: "内存 ↓"
+        case .memoryAscending: "内存 ↑"
+        }
+    }
+
+    func sorted(_ services: [MonitoredService]) -> [MonitoredService] {
+        services.sorted { lhs, rhs in
+            switch self {
+            case .nameAscending:
+                return compareNames(lhs, rhs, ascending: true)
+            case .nameDescending:
+                return compareNames(lhs, rhs, ascending: false)
+            case .memoryDescending:
+                if lhs.memoryBytes != rhs.memoryBytes {
+                    return lhs.memoryBytes > rhs.memoryBytes
+                }
+                return compareNames(lhs, rhs, ascending: true)
+            case .memoryAscending:
+                if lhs.memoryBytes != rhs.memoryBytes {
+                    return lhs.memoryBytes < rhs.memoryBytes
+                }
+                return compareNames(lhs, rhs, ascending: true)
+            }
+        }
+    }
+
+    private func compareNames(
+        _ lhs: MonitoredService,
+        _ rhs: MonitoredService,
+        ascending: Bool
+    ) -> Bool {
+        let comparison = lhs.displayName.localizedStandardCompare(rhs.displayName)
+        if comparison == .orderedSame {
+            return lhs.id < rhs.id
+        }
+        return ascending ? comparison == .orderedAscending : comparison == .orderedDescending
     }
 }
 

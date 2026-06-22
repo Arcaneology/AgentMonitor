@@ -79,18 +79,50 @@ final class MonitorStoreTests: XCTestCase {
         )
     }
 
-    private func makeExampleService() -> MonitoredService {
+    func testSortsServicesByNameInBothDirections() {
+        let alpha = makeExampleService(id: "alpha", displayName: "Alpha")
+        let zulu = makeExampleService(id: "zulu", displayName: "Zulu")
+
+        XCTAssertEqual(
+            ServiceSortOrder.nameAscending.sorted([zulu, alpha]).map(\.displayName),
+            ["Alpha", "Zulu"]
+        )
+        XCTAssertEqual(
+            ServiceSortOrder.nameDescending.sorted([alpha, zulu]).map(\.displayName),
+            ["Zulu", "Alpha"]
+        )
+    }
+
+    func testSortsServicesByMemoryInBothDirections() {
+        let low = makeExampleService(id: "low", displayName: "Low", memoryBytes: 8)
+        let high = makeExampleService(id: "high", displayName: "High", memoryBytes: 64)
+
+        XCTAssertEqual(
+            ServiceSortOrder.memoryDescending.sorted([low, high]).map(\.id),
+            ["high", "low"]
+        )
+        XCTAssertEqual(
+            ServiceSortOrder.memoryAscending.sorted([high, low]).map(\.id),
+            ["low", "high"]
+        )
+    }
+
+    private func makeExampleService(
+        id: String = "example",
+        displayName: String = "Example Project",
+        memoryBytes: UInt64 = 32 * 1_024 * 1_024
+    ) -> MonitoredService {
         let process = MonitoredProcess(
             id: ProcessIdentity(pid: 42, startTime: Date(timeIntervalSince1970: 42)),
             ownerUID: 501,
             executablePath: "/usr/bin/node",
             arguments: [],
             workingDirectory: URL(fileURLWithPath: "/tmp/example", isDirectory: true),
-            memoryBytes: 32 * 1_024 * 1_024
+            memoryBytes: memoryBytes
         )
         return MonitoredService(
-            id: "example",
-            displayName: "Example Project",
+            id: id,
+            displayName: displayName,
             kind: .localProject,
             projectRoot: process.workingDirectory,
             launchAgentLabel: nil,
