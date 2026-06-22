@@ -70,7 +70,6 @@ struct SystemCommandRunner: CommandRunning {
 
             }
 
-            process.waitUntilExit()
             return CommandResult(
                 terminationStatus: process.terminationStatus,
                 standardOutput: outputCollector.finish(),
@@ -91,7 +90,11 @@ private func stop(_ process: Process) {
     if process.isRunning {
         Darwin.kill(process.processIdentifier, SIGKILL)
     }
-    process.waitUntilExit()
+
+    let forcedDeadline = Date().addingTimeInterval(0.1)
+    while process.isRunning && Date() < forcedDeadline {
+        Thread.sleep(forTimeInterval: 0.01)
+    }
 }
 
 private final class PipeDataCollector: @unchecked Sendable {

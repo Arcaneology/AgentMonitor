@@ -2,24 +2,384 @@ import AppKit
 import SwiftUI
 
 struct MenuBarContentView: View {
+    @ObservedObject var store: MonitorStore
+    @State private var serviceToStop: MonitoredService?
+    @State private var actionAlert: ActionAlert?
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Agent Monitor 已就绪", systemImage: "checkmark.circle")
-                .font(.headline)
-
-            Text("进程与端口监控将在后续阶段实现。")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
+        VStack(spacing: 0) {
+            header
             Divider()
 
-            Button("退出 Agent Monitor") {
+            if store.snapshot.collectedAt == .distantPast && store.isRefreshing {
+                initialLoading
+            } else {
+                content
+            }
+
+            Divider()
+            footer
+        }
+        .frame(width: 420)
+        .background(.regularMaterial)
+        .confirmationDialog(
+            "停止服务？",
+            isPresented: Binding(
+                get: { serviceToStop != nil },
+                set: { if !$0 { serviceToStop = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: serviceToStop
+        ) { service in
+            Button("停止", role: .destructive) {
+                serviceToStop = nil
+                Task { await stop(service) }
+            }
+            Button("取消", role: .cancel) {
+                serviceToStop = nil
+            }
+        } message: { service in
+            Text(stopImpact(for: service))
+        }
+        .alert(item: $actionAlert) { alert in
+            switch alert {
+            case .force(let service, let pids):
+                Alert(
+                    title: Text("服务仍在运行"),
+                    message: Text("PID \(pids.map(String.init).joined(separator: ", ")) 未响应 SIGTERM。强制结束可能导致未保存的数据丢失。"),
+                    primaryButton: .destructive(Text("强制结束")) {
+                        Task { await forceStop(service) }
+                    },
+                    secondaryButton: .cancel()
+                )
+            case .error(let message):
+                Alert(
+                    title: Text("操作失败"),
+                    message: Text(message),
+                    dismissButton: .default(Text("好"))
+                )
+            }
+        }
+    }
+
+    private var header: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Label("Agent Monitor", systemImage: "network")
+                    .font(.headline)
+
+                Spacer()
+
+                if store.isRefreshing {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+
+                Button {
+                    Task { await store.refresh() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .disabled(store.isRefreshing)
+                .help("立即刷新")
+            }
+
+            HStack(spacing: 8) {
+                MetricCard(title: "服务", value: store.serviceCount, color: .blue)
+                MetricCard(title: "端口", value: store.portCount, color: .green)
+                MetricCard(
+                    title: "内存",
+                    value: store.services.reduce(0) { $0 + Int($1.memoryBytes) },
+                    formattedAsBytes: true,
+                    color: .purple
+                )
+            }
+        }
+        .padding(14)
+    }
+
+    private var content: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 14) {
+                if !store.snapshot.issues.isEmpty {
+                    issueBanner
+                }
+
+                serviceSection(kind: .localProject, title: "本地项目")
+                serviceSection(kind: .launchAgent, title: "用户 Daemon")
+                serviceSection(kind: .userProcess, title: "其他用户端口")
+
+                if store.services.isEmpty {
+                    emptyState
+                }
+            }
+            .padding(12)
+        }
+        .frame(maxHeight: 520)
+    }
+
+    private var initialLoading: some View {
+        VStack(spacing: 10) {
+            ProgressView()
+            Text("正在扫描用户服务…")
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, minHeight: 180)
+    }
+
+    private var issueBanner: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.yellow)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("部分数据暂不可用")
+                    .font(.subheadline.weight(.semibold))
+                Text(store.snapshot.issues.map(issueDescription).joined(separator: "；"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.yellow.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    @ViewBuilder
+    private func serviceSection(kind: MonitoredService.Kind, title: String) -> some View {
+        let services = store.services.filter { $0.kind == kind }
+        if !services.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title.uppercased())
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .tracking(0.6)
+
+                ForEach(services) { service in
+                    ServiceRow(
+                        service: service,
+                        isStopping: store.isStopping(service),
+                        onStop: { serviceToStop = service }
+                    )
+                }
+            }
+        }
+    }
+
+    private var emptyState: some View {
+        ContentUnavailableView(
+            "暂无用户服务",
+            systemImage: "network.slash",
+            description: Text("启动本地网页项目或用户 LaunchAgent 后，它会自动出现。")
+        )
+        .frame(maxWidth: .infinity, minHeight: 180)
+    }
+
+    private var footer: some View {
+        HStack {
+            Text(updatedText)
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+
+            Spacer()
+
+            Button("退出") {
                 NSApplication.shared.terminate(nil)
             }
             .keyboardShortcut("q")
+            .buttonStyle(.borderless)
         }
-        .padding(16)
-        .frame(width: 320)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    private var updatedText: String {
+        guard store.snapshot.collectedAt != .distantPast else { return "尚未刷新" }
+        let duration = Int(store.snapshot.collectionDuration * 1_000)
+        return "更新于 \(store.snapshot.collectedAt.formatted(date: .omitted, time: .standard)) · \(duration) ms"
+    }
+
+    private func issueDescription(_ issue: MonitorIssue) -> String {
+        switch issue.source {
+        case .ports: "端口扫描失败"
+        case .launchAgents: "LaunchAgent 扫描失败"
+        }
+    }
+
+    private func stopImpact(for service: MonitoredService) -> String {
+        let processText = service.processes.count == 1
+            ? "PID \(service.processes[0].id.pid)"
+            : "\(service.processes.count) 个进程"
+        guard !service.endpoints.isEmpty else {
+            return "将停止 \(processText)。该服务目前没有监听端口。"
+        }
+
+        let ports = service.endpoints.map { String($0.port) }.joined(separator: ", ")
+        return "将停止 \(processText)，并释放端口：\(ports)。"
+    }
+
+    private func stop(_ service: MonitoredService) async {
+        handle(await store.stop(service), service: service)
+    }
+
+    private func forceStop(_ service: MonitoredService) async {
+        handle(await store.forceStop(service), service: service)
+    }
+
+    private func handle(_ outcome: StopOutcome, service: MonitoredService) {
+        switch outcome {
+        case .stopped:
+            break
+        case .requiresForce(let pids):
+            actionAlert = .force(service, pids)
+        case .failed(let message):
+            actionAlert = .error(message)
+        }
     }
 }
 
+private enum ActionAlert: Identifiable {
+    case force(MonitoredService, [Int32])
+    case error(String)
+
+    var id: String {
+        switch self {
+        case .force(let service, _): "force:\(service.id)"
+        case .error(let message): "error:\(message)"
+        }
+    }
+}
+
+private struct MetricCard: View {
+    let title: String
+    let value: Int
+    var formattedAsBytes = false
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Circle()
+                .fill(color)
+                .frame(width: 7, height: 7)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text(formattedValue)
+                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                    .monospacedDigit()
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity)
+        .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 9))
+    }
+
+    private var formattedValue: String {
+        formattedAsBytes
+            ? ByteCountFormatter.string(fromByteCount: Int64(value), countStyle: .memory)
+            : String(value)
+    }
+}
+
+private struct ServiceRow: View {
+    let service: MonitoredService
+    let isStopping: Bool
+    let onStop: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 28, height: 28)
+                    .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 7))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(service.displayName)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
+                Spacer(minLength: 8)
+
+                VStack(alignment: .trailing, spacing: 6) {
+                    Text(ByteCountFormatter.string(
+                        fromByteCount: Int64(service.memoryBytes),
+                        countStyle: .memory
+                    ))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+
+                    if isStopping {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Button(role: .destructive, action: onStop) {
+                            Image(systemName: "stop.circle")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("停止服务")
+                    }
+                }
+            }
+
+            if service.endpoints.isEmpty {
+                Text("后台运行 · 无监听端口")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            } else {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 76), spacing: 6, alignment: .leading)],
+                    alignment: .leading,
+                    spacing: 6
+                ) {
+                    ForEach(service.endpoints, id: \.self) { endpoint in
+                        Text(verbatim: "\(endpoint.transport.rawValue.uppercased())  \(endpoint.port)")
+                            .font(.caption2.monospacedDigit())
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 4)
+                            .background(.quaternary.opacity(0.7), in: Capsule())
+                            .help(Text(verbatim: "\(endpoint.address):\(endpoint.port)"))
+                    }
+                }
+            }
+        }
+        .padding(10)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.65), in: RoundedRectangle(cornerRadius: 11))
+    }
+
+    private var detail: String {
+        let pids = service.processes.map { String($0.id.pid) }.joined(separator: ", ")
+        if let root = service.projectRoot {
+            return "PID \(pids) · \(root.path)"
+        }
+        let executablePath = service.processes.first?.executablePath ?? ""
+        return "PID \(pids) · \(executablePath.isEmpty ? "未知命令" : executablePath)"
+    }
+
+    private var icon: String {
+        switch service.kind {
+        case .localProject: "folder.badge.gearshape"
+        case .launchAgent: "gearshape.2"
+        case .userProcess: "terminal"
+        }
+    }
+
+    private var tint: Color {
+        switch service.kind {
+        case .localProject: .blue
+        case .launchAgent: .purple
+        case .userProcess: .orange
+        }
+    }
+}

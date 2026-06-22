@@ -93,9 +93,14 @@ struct ServiceGrouper: Sendable {
 
         let command = portRecords.compactMap(\.command).first
         let executableName = URL(fileURLWithPath: process.executablePath).lastPathComponent
+        let fallbackName = command.flatMap { value in
+            value.isEmpty || value.contains("\\x") ? nil : value
+        }
         return ServiceDescriptor(
             key: .process(process.id),
-            displayName: command ?? (executableName.isEmpty ? "PID \(process.id.pid)" : executableName),
+            displayName: executableName.isEmpty
+                ? (fallbackName ?? "PID \(process.id.pid)")
+                : executableName,
             kind: .userProcess,
             projectRoot: nil,
             launchAgentLabel: nil
@@ -243,4 +248,3 @@ private struct LaunchAgentCollectionResult: Sendable {
     let values: [LaunchAgentInfo]
     let issue: MonitorIssue?
 }
-

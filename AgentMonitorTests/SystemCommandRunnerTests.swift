@@ -27,5 +27,17 @@ final class SystemCommandRunnerTests: XCTestCase {
             XCTFail("Unexpected error: \(error)")
         }
     }
-}
 
+    func testRunsRepeatedlyWithoutHanging() async throws {
+        let runner = SystemCommandRunner()
+
+        for index in 0..<20 {
+            let result = try await runner.run(
+                executableURL: URL(fileURLWithPath: "/usr/bin/printf"),
+                arguments: [String(index)],
+                timeout: 1
+            )
+            XCTAssertEqual(result.terminationStatus, 0)
+        }
+    }
+}
