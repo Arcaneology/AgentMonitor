@@ -6,6 +6,8 @@
 
 ## 阶段 0：工程初始化
 
+状态：已完成
+
 输出：
 
 - macOS 14+ SwiftUI `MenuBarExtra` 应用目标。
@@ -21,6 +23,8 @@ xcodebuild -project AgentMonitor.xcodeproj -scheme AgentMonitor \
 ```
 
 ## 阶段 1：核心模型与端口解析
+
+状态：已完成
 
 输出：
 
@@ -94,4 +98,3 @@ xcodebuild -project AgentMonitor.xcodeproj -scheme AgentMonitor \
 - 典型开发机单轮采集低于 500 ms。
 - 持续运行 8 小时无刷新重入或明显内存增长。
 - 干净 macOS 14+ 用户环境可以安装、启动和退出。
-

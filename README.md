@@ -17,9 +17,19 @@ xcodebuild \
 
 也可以直接使用 Xcode 打开 `AgentMonitor.xcodeproj` 并运行 `AgentMonitor` scheme。
 
+## 测试
+
+```bash
+xcodebuild \
+  -project AgentMonitor.xcodeproj \
+  -scheme AgentMonitor \
+  -configuration Debug \
+  CODE_SIGNING_ALLOWED=NO \
+  test
+```
+
 ## 文档
 
 - [架构设计](docs/plans/2026-06-22-agent-monitor-design.md)
 - [实施计划](docs/plans/2026-06-22-agent-monitor-implementation.md)
 - [架构决策记录](docs/adr/README.md)
-

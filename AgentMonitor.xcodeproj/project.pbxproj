@@ -9,16 +9,46 @@
 /* Begin PBXBuildFile section */
 		A00100000000000000000001 /* AgentMonitorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000001 /* AgentMonitorApp.swift */; };
 		A00200000000000000000001 /* MenuBarContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00200000000000000000001 /* MenuBarContentView.swift */; };
+		A10100000000000000000001 /* ListeningEndpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10100000000000000000001 /* ListeningEndpoint.swift */; };
+		A10200000000000000000001 /* MonitoredProcess.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10200000000000000000001 /* MonitoredProcess.swift */; };
+		A10300000000000000000001 /* MonitoredService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10300000000000000000001 /* MonitoredService.swift */; };
+		A10400000000000000000001 /* PortCollecting.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10400000000000000000001 /* PortCollecting.swift */; };
+		A10500000000000000000001 /* LsofFieldParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10500000000000000000001 /* LsofFieldParser.swift */; };
+		A20100000000000000000001 /* LsofFieldParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20100000000000000000001 /* LsofFieldParserTests.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		J00100000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F00100000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E00100000000000000000001;
+			remoteInfo = AgentMonitor;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		B00100000000000000000001 /* AgentMonitorApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentMonitorApp.swift; sourceTree = "<group>"; };
 		B00200000000000000000001 /* MenuBarContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarContentView.swift; sourceTree = "<group>"; };
 		B00300000000000000000001 /* AgentMonitor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AgentMonitor.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B10100000000000000000001 /* ListeningEndpoint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListeningEndpoint.swift; sourceTree = "<group>"; };
+		B10200000000000000000001 /* MonitoredProcess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitoredProcess.swift; sourceTree = "<group>"; };
+		B10300000000000000000001 /* MonitoredService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitoredService.swift; sourceTree = "<group>"; };
+		B10400000000000000000001 /* PortCollecting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortCollecting.swift; sourceTree = "<group>"; };
+		B10500000000000000000001 /* LsofFieldParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LsofFieldParser.swift; sourceTree = "<group>"; };
+		B20100000000000000000001 /* LsofFieldParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LsofFieldParserTests.swift; sourceTree = "<group>"; };
+		B20200000000000000000001 /* AgentMonitorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AgentMonitorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		D00200000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D20200000000000000000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -32,6 +62,8 @@
 			isa = PBXGroup;
 			children = (
 				C00200000000000000000001 /* AgentMonitor */,
+				C10100000000000000000001 /* Core */,
+				C20100000000000000000001 /* AgentMonitorTests */,
 				C00300000000000000000001 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -49,8 +81,45 @@
 			isa = PBXGroup;
 			children = (
 				B00300000000000000000001 /* AgentMonitor.app */,
+				B20200000000000000000001 /* AgentMonitorTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		C10100000000000000000001 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				C10200000000000000000001 /* Models */,
+				C10300000000000000000001 /* Ports */,
+			);
+			path = AgentMonitor/Core;
+			sourceTree = "<group>";
+		};
+		C10200000000000000000001 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				B10100000000000000000001 /* ListeningEndpoint.swift */,
+				B10200000000000000000001 /* MonitoredProcess.swift */,
+				B10300000000000000000001 /* MonitoredService.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		C10300000000000000000001 /* Ports */ = {
+			isa = PBXGroup;
+			children = (
+				B10400000000000000000001 /* PortCollecting.swift */,
+				B10500000000000000000001 /* LsofFieldParser.swift */,
+			);
+			path = Ports;
+			sourceTree = "<group>";
+		};
+		C20100000000000000000001 /* AgentMonitorTests */ = {
+			isa = PBXGroup;
+			children = (
+				B20100000000000000000001 /* LsofFieldParserTests.swift */,
+			);
+			path = AgentMonitorTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -73,6 +142,24 @@
 			productReference = B00300000000000000000001 /* AgentMonitor.app */;
 			productType = "com.apple.product-type.application";
 		};
+		E00200000000000000000001 /* AgentMonitorTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = H00300000000000000000001 /* Build configuration list for PBXNativeTarget "AgentMonitorTests" */;
+			buildPhases = (
+				D20100000000000000000001 /* Sources */,
+				D20200000000000000000001 /* Frameworks */,
+				D20300000000000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				K00100000000000000000001 /* PBXTargetDependency */,
+			);
+			name = AgentMonitorTests;
+			productName = AgentMonitorTests;
+			productReference = B20200000000000000000001 /* AgentMonitorTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -85,6 +172,10 @@
 				TargetAttributes = {
 					E00100000000000000000001 = {
 						CreatedOnToolsVersion = 26.0;
+					};
+					E00200000000000000000001 = {
+						CreatedOnToolsVersion = 26.0;
+						TestTargetID = E00100000000000000000001;
 					};
 				};
 			};
@@ -102,12 +193,20 @@
 			projectRoot = "";
 			targets = (
 				E00100000000000000000001 /* AgentMonitor */,
+				E00200000000000000000001 /* AgentMonitorTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		D00300000000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D20300000000000000000001 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -123,10 +222,31 @@
 			files = (
 				A00100000000000000000001 /* AgentMonitorApp.swift in Sources */,
 				A00200000000000000000001 /* MenuBarContentView.swift in Sources */,
+				A10100000000000000000001 /* ListeningEndpoint.swift in Sources */,
+				A10200000000000000000001 /* MonitoredProcess.swift in Sources */,
+				A10300000000000000000001 /* MonitoredService.swift in Sources */,
+				A10400000000000000000001 /* PortCollecting.swift in Sources */,
+				A10500000000000000000001 /* LsofFieldParser.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D20100000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A20100000000000000000001 /* LsofFieldParserTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		K00100000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E00100000000000000000001 /* AgentMonitor */;
+			targetProxy = J00100000000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		G00100000000000000000001 /* Debug */ = {
@@ -211,6 +331,34 @@
 			};
 			name = Release;
 		};
+		G20100000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lumos.AgentMonitorTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AgentMonitor.app/Contents/MacOS/AgentMonitor";
+			};
+			name = Debug;
+		};
+		G20200000000000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lumos.AgentMonitorTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AgentMonitor.app/Contents/MacOS/AgentMonitor";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -232,8 +380,16 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		H00300000000000000000001 /* Build configuration list for PBXNativeTarget "AgentMonitorTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				G20100000000000000000001 /* Debug */,
+				G20200000000000000000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 	};
 	rootObject = F00100000000000000000001 /* Project object */;
 }
-
