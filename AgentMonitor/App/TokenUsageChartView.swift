@@ -193,12 +193,10 @@ private enum TokenUsageCategory: String, CaseIterable {
 enum TokenCountFormatter {
     static func compact(_ value: Int64) -> String {
         switch value {
-        case 1_000_000_000...:
-            format(value, divisor: 1_000_000_000, suffix: "B")
-        case 1_000_000...:
-            format(value, divisor: 1_000_000, suffix: "M")
-        case 1_000...:
-            format(value, divisor: 1_000, suffix: "K")
+        case 100_000_000...:
+            format(value, divisor: 100_000_000, suffix: "亿")
+        case 10_000...:
+            format(value, divisor: 10_000, suffix: "万")
         default:
             String(value)
         }
@@ -206,7 +204,6 @@ enum TokenCountFormatter {
 
     private static func format(_ value: Int64, divisor: Double, suffix: String) -> String {
         let scaled = Double(value) / divisor
-        let pattern = scaled >= 100 ? "%.0f%@" : scaled >= 10 ? "%.1f%@" : "%.2f%@"
-        return String(format: pattern, scaled, suffix)
+        return String(format: "%.2f%@", scaled, suffix)
     }
 }
