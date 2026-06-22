@@ -8,10 +8,11 @@ Agent Monitor 是一个面向 macOS 14+ 的原生菜单栏应用，用于自动�
 - 展示进程 PID、可执行文件、工作目录和实时 physical footprint 内存。
 - 识别正在运行的 `~/Library/LaunchAgents` 用户 daemon。
 - 根据 `.git`、`package.json`、`pyproject.toml`、`go.mod` 和 `Cargo.toml` 自动识别并归并本地网页项目。
+- 只读 `~/.cc-switch/cc-switch.db`，以输入、缓存、输出堆叠柱状图展示今天、近 24 小时和近 30 天 Token 用量。
 - 普通进程先发送 `SIGTERM`，超时后才提供经二次确认的 `SIGKILL`；LaunchAgent 使用 `launchctl bootout`。
 - 停止前重新校验 UID、PID 和进程启动时间，避免 PID 复用导致误操作。
 
-应用只监控和操作当前登录用户的进程，不处理 root、其他用户或系统 daemon。停止一个进程会释放该进程拥有的全部端口，不能只关闭其中一个 socket。
+应用只监控和操作当前登录用户的进程，不处理 root、其他用户或系统 daemon。未注册为用户 LaunchAgent、且只监听 Unix Domain Socket 的普通后台进程不会进入列表。停止一个进程会释放该进程拥有的全部端口，不能只关闭其中一个 socket。
 
 ## 本地构建
 
@@ -39,7 +40,7 @@ xcodebuild \
   test
 ```
 
-本机测试覆盖真实随机端口网页服务的自动发现、`lsof` 解析、项目归并、定时状态、安全停止和命令超时。
+本机测试覆盖真实随机端口网页服务的自动发现、`lsof` 解析、项目归并、Token 用量聚合、定时状态、安全停止和命令超时。
 
 ## 文档
 

@@ -47,7 +47,10 @@ final class MonitorStoreTests: XCTestCase {
         let store = MonitorStore(discoverer: StaticDiscoverer(snapshot: snapshot))
         await store.refresh()
 
-        let hostingView = NSHostingView(rootView: MenuBarContentView(store: store))
+        let hostingView = NSHostingView(rootView: MenuBarContentView(
+            store: store,
+            tokenUsageStore: makeTokenUsageStore()
+        ))
         hostingView.layoutSubtreeIfNeeded()
 
         let height = hostingView.fittingSize.height
@@ -65,10 +68,14 @@ final class MonitorStoreTests: XCTestCase {
         let store = MonitorStore(discoverer: StaticDiscoverer(snapshot: snapshot))
         await store.refresh()
 
-        let regularView = NSHostingView(rootView: MenuBarContentView(store: store))
+        let regularView = NSHostingView(rootView: MenuBarContentView(
+            store: store,
+            tokenUsageStore: makeTokenUsageStore()
+        ))
         let confirmationView = NSHostingView(rootView: MenuBarContentView(
             store: store,
-            serviceToStop: service
+            serviceToStop: service,
+            tokenUsageStore: makeTokenUsageStore()
         ))
         regularView.layoutSubtreeIfNeeded()
         confirmationView.layoutSubtreeIfNeeded()
@@ -130,6 +137,10 @@ final class MonitorStoreTests: XCTestCase {
             endpoints: [ListeningEndpoint(address: "127.0.0.1", port: 3_000, transport: .tcp)]
         )
     }
+
+    private func makeTokenUsageStore() -> TokenUsageStore {
+        TokenUsageStore(reader: EmptyTokenUsageReader())
+    }
 }
 
 private struct StaticDiscoverer: ServiceDiscovering {
@@ -154,5 +165,11 @@ private actor SuspendedDiscoverer: ServiceDiscovering {
     func resume(returning snapshot: MonitorSnapshot) {
         continuation?.resume(returning: snapshot)
         continuation = nil
+    }
+}
+
+private struct EmptyTokenUsageReader: TokenUsageReading {
+    func records(from start: Date, through end: Date) async throws -> [TokenUsageRecord] {
+        []
     }
 }

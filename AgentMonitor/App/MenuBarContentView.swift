@@ -1,15 +1,23 @@
 import AppKit
 import SwiftUI
 
+@MainActor
 struct MenuBarContentView: View {
     @ObservedObject var store: MonitorStore
+    @StateObject private var tokenUsageStore: TokenUsageStore
     @State private var serviceToStop: MonitoredService?
     @State private var actionPrompt: ActionPrompt?
     @State private var sortOrder: ServiceSortOrder = .nameAscending
+    @State private var tokenUsageRange: TokenUsageRange = .today
 
-    init(store: MonitorStore, serviceToStop: MonitoredService? = nil) {
+    init(
+        store: MonitorStore,
+        serviceToStop: MonitoredService? = nil,
+        tokenUsageStore: TokenUsageStore = TokenUsageStore()
+    ) {
         self.store = store
         _serviceToStop = State(initialValue: serviceToStop)
+        _tokenUsageStore = StateObject(wrappedValue: tokenUsageStore)
     }
 
     var body: some View {
@@ -52,7 +60,10 @@ struct MenuBarContentView: View {
                 }
 
                 Button {
-                    Task { await store.refresh() }
+                    Task {
+                        await store.refresh()
+                        await tokenUsageStore.refresh(range: tokenUsageRange)
+                    }
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
@@ -82,6 +93,8 @@ struct MenuBarContentView: View {
                     issueBanner
                 }
 
+                TokenUsageChartView(store: tokenUsageStore, range: $tokenUsageRange)
+
                 serviceSection(kind: .localProject, title: "本地项目")
                 serviceSection(kind: .launchAgent, title: "用户 Daemon")
                 serviceSection(kind: .userProcess, title: "其他用户端口")
@@ -92,7 +105,7 @@ struct MenuBarContentView: View {
             }
             .padding(12)
         }
-        .frame(height: store.services.isEmpty ? 180 : 360)
+        .frame(height: store.services.isEmpty ? 320 : 470)
     }
 
     private var initialLoading: some View {
