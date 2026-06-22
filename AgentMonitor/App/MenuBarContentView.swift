@@ -116,7 +116,7 @@ struct MenuBarContentView: View {
             }
             .padding(12)
         }
-        .frame(maxHeight: 520)
+        .frame(height: store.services.isEmpty ? 180 : 360)
     }
 
     private var initialLoading: some View {
