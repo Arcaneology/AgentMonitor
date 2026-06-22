@@ -1,7 +1,7 @@
 # Agent Monitor 架构设计
 
 日期：2026-06-22  
-状态：已确认
+状态：已实现
 
 ## 1. 目标
 
@@ -84,7 +84,7 @@ flowchart LR
 
 ### 5.3 用户 LaunchAgent
 
-读取 `~/Library/LaunchAgents/*.plist` 获取 label 和启动配置，再通过 `/bin/launchctl print gui/<uid>/<label>` 判断运行状态并关联 PID。无效或无法解析的 plist 只产生局部错误，不中断其他采集。
+读取 `~/Library/LaunchAgents/*.plist` 获取 label 和启动配置，再通过 `/bin/launchctl list` 的稳定字段输出判断运行状态并关联 PID。无效或无法解析的 plist 只跳过单项，不中断其他采集。
 
 ### 5.4 本地项目识别
 
@@ -133,7 +133,7 @@ flowchart TD
 
 ## 8. UI 结构
 
-菜单栏入口使用 SwiftUI `MenuBarExtra` 的 window 样式。弹窗默认宽度约 360 点，按以下顺序展示：
+菜单栏入口使用 SwiftUI `MenuBarExtra` 的 window 样式。弹窗默认宽度 420 点，按以下顺序展示：
 
 1. 顶部摘要：服务数、端口数、刷新状态。
 2. 本地项目。
@@ -147,7 +147,7 @@ flowchart TD
 
 | 失败 | 行为 |
 | --- | --- |
-| `lsof` 超时或退出失败 | 保留上一次端口快照并标记端口数据过期 |
+| `lsof` 超时或退出失败 | 保留其他来源的本轮结果并显示端口扫描降级状态 |
 | 某个进程在采集中退出 | 忽略该进程，下一轮刷新收敛 |
 | 无法读取进程详情 | 展示可获得的端口和 PID，字段标记未知 |
 | LaunchAgent plist 无效 | 跳过单项并记录诊断信息 |
@@ -178,4 +178,3 @@ flowchart TD
 - 优雅停止能释放测试端口；多端口停止前有明确提示。
 - 非当前用户或启动时间不匹配的进程不会被终止。
 - 应用持续运行 8 小时无明显内存增长或刷新任务叠加。
-

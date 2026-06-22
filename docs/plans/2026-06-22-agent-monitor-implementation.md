@@ -63,6 +63,8 @@ xcodebuild -project AgentMonitor.xcodeproj -scheme AgentMonitor \
 
 ## 阶段 4：刷新状态与菜单栏 UI
 
+状态：已完成
+
 输出：
 
 - `MonitorStore` 的 2 秒异步刷新循环，禁止并发刷新叠加。
@@ -76,6 +78,8 @@ xcodebuild -project AgentMonitor.xcodeproj -scheme AgentMonitor \
 - 连续运行刷新，确认任务取消和内存稳定。
 
 ## 阶段 5：安全停止服务
+
+状态：已完成
 
 输出：
 
@@ -91,10 +95,12 @@ xcodebuild -project AgentMonitor.xcodeproj -scheme AgentMonitor \
 
 ## 阶段 6：性能、稳定性与分发
 
+状态：开发与本机验收已完成；Developer ID 签名、公证和 8 小时长稳测试属于发布门禁。
+
 输出：
 
 - 采集耗时与应用自身 CPU/内存测量。
-- Developer ID Release 构建、公证和安装说明。
+- Release 构建及 Developer ID 签名、公证和安装说明。
 - 可选的 `SMAppService` 登录启动能力；只有用户确认需要时才实现。
 
 验证：
@@ -102,3 +108,11 @@ xcodebuild -project AgentMonitor.xcodeproj -scheme AgentMonitor \
 - 典型开发机单轮采集低于 500 ms。
 - 持续运行 8 小时无刷新重入或明显内存增长。
 - 干净 macOS 14+ 用户环境可以安装、启动和退出。
+
+本机结果（2026-06-22）：
+
+- Debug 单实例物理内存约 14.8 MB，生命周期平均 CPU 约 0.2%。
+- 真实菜单栏运行时单轮采集约 34–47 ms。
+- 自动刷新无重入测试、20 次连续命令执行回归测试和全量单元/集成测试通过。
+- Debug 与未签名 Release 构建通过；签名、公证、干净 macOS 14+ 安装和 8 小时长稳测试需在持有 Developer ID 凭据的发布环境完成。
+- 用户未要求登录启动，因此未加入 `SMAppService`。
