@@ -14,7 +14,15 @@
 		A10300000000000000000001 /* MonitoredService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10300000000000000000001 /* MonitoredService.swift */; };
 		A10400000000000000000001 /* PortCollecting.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10400000000000000000001 /* PortCollecting.swift */; };
 		A10500000000000000000001 /* LsofFieldParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10500000000000000000001 /* LsofFieldParser.swift */; };
+		A10600000000000000000001 /* SystemCommandRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10600000000000000000001 /* SystemCommandRunner.swift */; };
+		A10700000000000000000001 /* LsofPortCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10700000000000000000001 /* LsofPortCollector.swift */; };
+		A10800000000000000000001 /* DarwinProcessCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10800000000000000000001 /* DarwinProcessCollector.swift */; };
+		A10900000000000000000001 /* LaunchAgentCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10900000000000000000001 /* LaunchAgentCollector.swift */; };
 		A20100000000000000000001 /* LsofFieldParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20100000000000000000001 /* LsofFieldParserTests.swift */; };
+		A20200000000000000000001 /* SystemCommandRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20300000000000000000001 /* SystemCommandRunnerTests.swift */; };
+		A20300000000000000000001 /* LsofPortCollectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20400000000000000000001 /* LsofPortCollectorTests.swift */; };
+		A20400000000000000000001 /* DarwinProcessCollectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20500000000000000000001 /* DarwinProcessCollectorTests.swift */; };
+		A20500000000000000000001 /* LaunchAgentCollectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20600000000000000000001 /* LaunchAgentCollectorTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -36,8 +44,16 @@
 		B10300000000000000000001 /* MonitoredService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitoredService.swift; sourceTree = "<group>"; };
 		B10400000000000000000001 /* PortCollecting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortCollecting.swift; sourceTree = "<group>"; };
 		B10500000000000000000001 /* LsofFieldParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LsofFieldParser.swift; sourceTree = "<group>"; };
+		B10600000000000000000001 /* SystemCommandRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemCommandRunner.swift; sourceTree = "<group>"; };
+		B10700000000000000000001 /* LsofPortCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LsofPortCollector.swift; sourceTree = "<group>"; };
+		B10800000000000000000001 /* DarwinProcessCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DarwinProcessCollector.swift; sourceTree = "<group>"; };
+		B10900000000000000000001 /* LaunchAgentCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAgentCollector.swift; sourceTree = "<group>"; };
 		B20100000000000000000001 /* LsofFieldParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LsofFieldParserTests.swift; sourceTree = "<group>"; };
 		B20200000000000000000001 /* AgentMonitorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AgentMonitorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B20300000000000000000001 /* SystemCommandRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemCommandRunnerTests.swift; sourceTree = "<group>"; };
+		B20400000000000000000001 /* LsofPortCollectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LsofPortCollectorTests.swift; sourceTree = "<group>"; };
+		B20500000000000000000001 /* DarwinProcessCollectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DarwinProcessCollectorTests.swift; sourceTree = "<group>"; };
+		B20600000000000000000001 /* LaunchAgentCollectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAgentCollectorTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -91,6 +107,8 @@
 			children = (
 				C10200000000000000000001 /* Models */,
 				C10300000000000000000001 /* Ports */,
+				C10400000000000000000001 /* Collectors */,
+				C10500000000000000000001 /* System */,
 			);
 			path = AgentMonitor/Core;
 			sourceTree = "<group>";
@@ -110,14 +128,36 @@
 			children = (
 				B10400000000000000000001 /* PortCollecting.swift */,
 				B10500000000000000000001 /* LsofFieldParser.swift */,
+				B10700000000000000000001 /* LsofPortCollector.swift */,
 			);
 			path = Ports;
+			sourceTree = "<group>";
+		};
+		C10400000000000000000001 /* Collectors */ = {
+			isa = PBXGroup;
+			children = (
+				B10800000000000000000001 /* DarwinProcessCollector.swift */,
+				B10900000000000000000001 /* LaunchAgentCollector.swift */,
+			);
+			path = Collectors;
+			sourceTree = "<group>";
+		};
+		C10500000000000000000001 /* System */ = {
+			isa = PBXGroup;
+			children = (
+				B10600000000000000000001 /* SystemCommandRunner.swift */,
+			);
+			path = System;
 			sourceTree = "<group>";
 		};
 		C20100000000000000000001 /* AgentMonitorTests */ = {
 			isa = PBXGroup;
 			children = (
 				B20100000000000000000001 /* LsofFieldParserTests.swift */,
+				B20300000000000000000001 /* SystemCommandRunnerTests.swift */,
+				B20400000000000000000001 /* LsofPortCollectorTests.swift */,
+				B20500000000000000000001 /* DarwinProcessCollectorTests.swift */,
+				B20600000000000000000001 /* LaunchAgentCollectorTests.swift */,
 			);
 			path = AgentMonitorTests;
 			sourceTree = "<group>";
@@ -227,6 +267,10 @@
 				A10300000000000000000001 /* MonitoredService.swift in Sources */,
 				A10400000000000000000001 /* PortCollecting.swift in Sources */,
 				A10500000000000000000001 /* LsofFieldParser.swift in Sources */,
+				A10600000000000000000001 /* SystemCommandRunner.swift in Sources */,
+				A10700000000000000000001 /* LsofPortCollector.swift in Sources */,
+				A10800000000000000000001 /* DarwinProcessCollector.swift in Sources */,
+				A10900000000000000000001 /* LaunchAgentCollector.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -235,6 +279,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				A20100000000000000000001 /* LsofFieldParserTests.swift in Sources */,
+				A20200000000000000000001 /* SystemCommandRunnerTests.swift in Sources */,
+				A20300000000000000000001 /* LsofPortCollectorTests.swift in Sources */,
+				A20400000000000000000001 /* DarwinProcessCollectorTests.swift in Sources */,
+				A20500000000000000000001 /* LaunchAgentCollectorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

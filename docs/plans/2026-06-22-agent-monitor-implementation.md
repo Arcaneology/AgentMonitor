@@ -36,6 +36,8 @@ xcodebuild -project AgentMonitor.xcodeproj -scheme AgentMonitor \
 
 ## 阶段 2：进程与 LaunchAgent 采集
 
+状态：已完成
+
 输出：
 
 - 基于 `libproc` 的当前用户进程详情和内存采集。
