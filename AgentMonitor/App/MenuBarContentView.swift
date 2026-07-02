@@ -82,8 +82,54 @@ struct MenuBarContentView: View {
                     color: .purple
                 )
             }
+
+            serverModeControl
         }
         .padding(14)
+    }
+
+    private var serverModeControl: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Label("Server", systemImage: "server.rack")
+                    .font(.subheadline.weight(.semibold))
+
+                Text(serverModeStatusText)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(serverModeStatusColor)
+
+                Spacer()
+
+                if store.isChangingServerMode {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+
+                Toggle(
+                    "",
+                    isOn: Binding(
+                        get: { store.serverModeSnapshot.isEnabled },
+                        set: { enabled in
+                            Task { await store.setServerModeEnabled(enabled) }
+                        }
+                    )
+                )
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .disabled(store.isChangingServerMode)
+                .help("切换 Server 保活模式")
+            }
+
+            if let message = store.serverModeSnapshot.message {
+                Text(message)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private var content: some View {
@@ -306,6 +352,22 @@ struct MenuBarContentView: View {
         guard store.snapshot.collectedAt != .distantPast else { return "尚未刷新" }
         let duration = Int(store.snapshot.collectionDuration * 1_000)
         return "更新于 \(store.snapshot.collectedAt.formatted(date: .omitted, time: .standard)) · \(duration) ms"
+    }
+
+    private var serverModeStatusText: String {
+        switch store.serverModeSnapshot.state {
+        case .enabled: "开"
+        case .disabled: "关"
+        case .unknown: "未知"
+        }
+    }
+
+    private var serverModeStatusColor: Color {
+        switch store.serverModeSnapshot.state {
+        case .enabled: .green
+        case .disabled: .secondary
+        case .unknown: .orange
+        }
     }
 
     private func issueDescription(_ issue: MonitorIssue) -> String {

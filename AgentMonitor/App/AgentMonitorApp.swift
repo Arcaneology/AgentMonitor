@@ -20,11 +20,27 @@ struct AgentMonitorApp: App {
         MenuBarExtra {
             MenuBarContentView(store: store)
         } label: {
-            Label("\(store.portCount)", systemImage: "network")
-                .accessibilityLabel("Agent Monitor，\(store.portCount) 个端口")
+            Label("\(store.portCount) · Server \(serverModeMenuText)", systemImage: serverModeMenuIcon)
+                .accessibilityLabel("Agent Monitor，\(store.portCount) 个端口，Server \(serverModeMenuText)")
         }
         .menuBarExtraStyle(.window)
 
+    }
+
+    private var serverModeMenuText: String {
+        switch store.serverModeSnapshot.state {
+        case .enabled: "开"
+        case .disabled: "关"
+        case .unknown: "未知"
+        }
+    }
+
+    private var serverModeMenuIcon: String {
+        switch store.serverModeSnapshot.state {
+        case .enabled: "server.rack"
+        case .disabled: "network"
+        case .unknown: "questionmark.circle"
+        }
     }
 }
 
@@ -78,9 +94,11 @@ private enum AppDependencies {
             processSignaler: SystemProcessSignaler(),
             commandRunner: commandRunner
         )
+        let serverModeController = ServerModeController(commandRunner: commandRunner)
         return MonitorStore(
             discoverer: discoveryEngine,
-            serviceStopper: serviceStopper
+            serviceStopper: serviceStopper,
+            serverModeController: serverModeController
         )
     }
 }

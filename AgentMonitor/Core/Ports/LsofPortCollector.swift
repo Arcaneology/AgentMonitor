@@ -5,6 +5,8 @@ struct LsofPortCollector: PortCollecting {
         case commandFailed(status: Int32, message: String)
     }
 
+    private static let commandTimeout: TimeInterval = 5
+
     private let ownerUID: UInt32
     private let commandRunner: any CommandRunning
     private let parser = LsofFieldParser()
@@ -21,7 +23,7 @@ struct LsofPortCollector: PortCollecting {
                 "-nP", "-w", "-a", "-u", String(ownerUID),
                 "-iTCP", "-sTCP:LISTEN", "-iUDP", "-FpcufPnT0"
             ],
-            timeout: 2
+            timeout: Self.commandTimeout
         )
 
         if result.terminationStatus == 1 && result.standardOutput.isEmpty {
@@ -40,4 +42,3 @@ struct LsofPortCollector: PortCollecting {
             .filter { $0.ownerUID == ownerUID }
     }
 }
-

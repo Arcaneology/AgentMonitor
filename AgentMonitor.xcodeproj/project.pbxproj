@@ -24,6 +24,7 @@
 		A11200000000000000000001 /* MonitorStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11200000000000000000001 /* MonitorStore.swift */; };
 		A11300000000000000000001 /* ServiceStopController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11300000000000000000001 /* ServiceStopController.swift */; };
 		A11400000000000000000001 /* CCTokenUsageReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11400000000000000000001 /* CCTokenUsageReader.swift */; };
+		A11500000000000000000001 /* ServerModeController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11500000000000000000001 /* ServerModeController.swift */; };
 		A20100000000000000000001 /* LsofFieldParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20100000000000000000001 /* LsofFieldParserTests.swift */; };
 		A20200000000000000000001 /* SystemCommandRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20300000000000000000001 /* SystemCommandRunnerTests.swift */; };
 		A20300000000000000000001 /* LsofPortCollectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20400000000000000000001 /* LsofPortCollectorTests.swift */; };
@@ -34,6 +35,7 @@
 		A20800000000000000000001 /* MonitorStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20900000000000000000001 /* MonitorStoreTests.swift */; };
 		A20900000000000000000001 /* ServiceStopControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B21000000000000000000001 /* ServiceStopControllerTests.swift */; };
 		A21000000000000000000001 /* TokenUsageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B21100000000000000000001 /* TokenUsageTests.swift */; };
+		A21100000000000000000001 /* ServerModeControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B21200000000000000000001 /* ServerModeControllerTests.swift */; };
 		A30100000000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B30100000000000000000001 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -66,6 +68,7 @@
 		B11200000000000000000001 /* MonitorStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorStore.swift; sourceTree = "<group>"; };
 		B11300000000000000000001 /* ServiceStopController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceStopController.swift; sourceTree = "<group>"; };
 		B11400000000000000000001 /* CCTokenUsageReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CCTokenUsageReader.swift; sourceTree = "<group>"; };
+		B11500000000000000000001 /* ServerModeController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerModeController.swift; sourceTree = "<group>"; };
 		B20100000000000000000001 /* LsofFieldParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LsofFieldParserTests.swift; sourceTree = "<group>"; };
 		B20200000000000000000001 /* AgentMonitorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AgentMonitorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20300000000000000000001 /* SystemCommandRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemCommandRunnerTests.swift; sourceTree = "<group>"; };
@@ -77,6 +80,7 @@
 		B20900000000000000000001 /* MonitorStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorStoreTests.swift; sourceTree = "<group>"; };
 		B21000000000000000000001 /* ServiceStopControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceStopControllerTests.swift; sourceTree = "<group>"; };
 		B21100000000000000000001 /* TokenUsageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenUsageTests.swift; sourceTree = "<group>"; };
+		B21200000000000000000001 /* ServerModeControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerModeControllerTests.swift; sourceTree = "<group>"; };
 		B30100000000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -176,6 +180,7 @@
 			children = (
 				B10600000000000000000001 /* SystemCommandRunner.swift */,
 				B11300000000000000000001 /* ServiceStopController.swift */,
+				B11500000000000000000001 /* ServerModeController.swift */,
 			);
 			path = System;
 			sourceTree = "<group>";
@@ -226,6 +231,7 @@
 				B20900000000000000000001 /* MonitorStoreTests.swift */,
 				B21000000000000000000001 /* ServiceStopControllerTests.swift */,
 				B21100000000000000000001 /* TokenUsageTests.swift */,
+				B21200000000000000000001 /* ServerModeControllerTests.swift */,
 			);
 			path = AgentMonitorTests;
 			sourceTree = "<group>";
@@ -346,6 +352,7 @@
 				A11200000000000000000001 /* MonitorStore.swift in Sources */,
 				A11300000000000000000001 /* ServiceStopController.swift in Sources */,
 				A11400000000000000000001 /* CCTokenUsageReader.swift in Sources */,
+				A11500000000000000000001 /* ServerModeController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -363,6 +370,7 @@
 				A20800000000000000000001 /* MonitorStoreTests.swift in Sources */,
 				A20900000000000000000001 /* ServiceStopControllerTests.swift in Sources */,
 				A21000000000000000000001 /* TokenUsageTests.swift in Sources */,
+				A21100000000000000000001 /* ServerModeControllerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -5,6 +5,11 @@ import SwiftUI
 struct TokenUsageChartView: View {
     @ObservedObject var store: TokenUsageStore
     @Binding var range: TokenUsageRange
+    @State private var hoverState: TokenUsageHoverState?
+
+    private static let highUsageThreshold: Int64 = 100_000_000
+    private static let tooltipSize = CGSize(width: 164, height: 104)
+    private static let tooltipGap: CGFloat = 10
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -90,14 +95,28 @@ struct TokenUsageChartView: View {
 
     private func usageChart(_ snapshot: TokenUsageSnapshot) -> some View {
         let points = snapshot.buckets.flatMap(TokenUsageChartPoint.points)
+        let highUsageBuckets = range == .last30Days
+            ? snapshot.buckets.filter(isHighUsageBucket)
+            : []
 
-        return Chart(points) { point in
-            BarMark(
-                x: .value("时间", point.date),
-                y: .value("Tokens", Double(point.tokens))
-            )
-            .foregroundStyle(by: .value("类型", point.category.title))
-            .cornerRadius(2)
+        return Chart {
+            ForEach(points) { point in
+                BarMark(
+                    x: .value("时间", point.date),
+                    y: .value("Tokens", Double(point.tokens))
+                )
+                .foregroundStyle(by: .value("类型", point.category.title))
+                .cornerRadius(2)
+            }
+
+            ForEach(highUsageBuckets) { bucket in
+                PointMark(
+                    x: .value("时间", bucket.start),
+                    y: .value("Tokens", Double(bucket.totalTokens))
+                )
+                .foregroundStyle(.yellow)
+                .symbolSize(42)
+            }
         }
         .chartForegroundStyleScale(
             domain: TokenUsageCategory.allCases.map(\.title),
@@ -105,6 +124,7 @@ struct TokenUsageChartView: View {
         )
         .chartLegend(position: .bottom, alignment: .leading, spacing: 10)
         .chartXScale(range: .plotDimension(startPadding: 8, endPadding: 20))
+        .chartYScale(domain: 0...chartYUpperBound(for: snapshot.buckets))
         .chartXAxis {
             AxisMarks(values: axisDates(snapshot.buckets)) { value in
                 AxisValueLabel {
@@ -125,7 +145,173 @@ struct TokenUsageChartView: View {
                 }
             }
         }
+        .chartOverlay { proxy in
+            chartHoverOverlay(proxy: proxy, buckets: snapshot.buckets)
+        }
         .accessibilityLabel("Token 用量柱状图，合计 \(snapshot.totalTokens) Tokens")
+    }
+
+    private func chartHoverOverlay(proxy: ChartProxy, buckets: [TokenUsageBucket]) -> some View {
+        GeometryReader { geometry in
+            if let plotFrame = proxy.plotFrame {
+                let plotRect = geometry[plotFrame]
+
+                ZStack(alignment: .topLeading) {
+                    Rectangle()
+                        .fill(.clear)
+                        .contentShape(Rectangle())
+
+                    if let hoverState,
+                       let bucket = buckets.first(where: { $0.start == hoverState.bucketStart }) {
+                        if let lineX = proxy.position(forX: bucket.start) {
+                            Path { path in
+                                let x = plotRect.minX + lineX
+                                path.move(to: CGPoint(x: x, y: plotRect.minY))
+                                path.addLine(to: CGPoint(x: x, y: plotRect.maxY))
+                            }
+                            .stroke(
+                                Color.secondary.opacity(0.55),
+                                style: StrokeStyle(lineWidth: 1, dash: [3, 3])
+                            )
+                            .allowsHitTesting(false)
+                        }
+
+                        tokenTooltip(for: bucket)
+                            .position(Self.tooltipPosition(
+                                for: hoverState.location,
+                                in: geometry.size
+                            ))
+                    }
+                }
+                .onContinuousHover { phase in
+                    switch phase {
+                    case let .active(location):
+                        guard plotRect.contains(location),
+                              let date = proxy.value(
+                                atX: location.x - plotRect.origin.x,
+                                as: Date.self
+                              ),
+                              let bucket = buckets.min(by: {
+                                abs($0.start.timeIntervalSince(date))
+                                    < abs($1.start.timeIntervalSince(date))
+                              }) else {
+                            hoverState = nil
+                            return
+                        }
+                        hoverState = TokenUsageHoverState(
+                            bucketStart: bucket.start,
+                            location: location
+                        )
+                    case .ended:
+                        hoverState = nil
+                    }
+                }
+            }
+        }
+    }
+
+    private func tokenTooltip(for bucket: TokenUsageBucket) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Text(tooltipTitle(for: bucket.start))
+                    .font(.caption.weight(.semibold))
+
+                Spacer(minLength: 4)
+
+                if isHighUsageBucket(bucket) {
+                    Text("1亿+")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.yellow)
+                }
+            }
+
+            tokenTooltipRow("输入", value: bucket.inputTokens, color: .cyan)
+            tokenTooltipRow("缓存", value: bucket.cacheTokens, color: .indigo)
+            tokenTooltipRow("输出", value: bucket.outputTokens, color: .pink)
+
+            Divider()
+
+            HStack {
+                Text("合计")
+                Spacer()
+                Text(bucket.totalTokens, format: .number.grouping(.automatic))
+                    .fontWeight(.semibold)
+                    .monospacedDigit()
+            }
+            .font(.caption)
+        }
+        .padding(8)
+        .frame(
+            width: Self.tooltipSize.width,
+            height: Self.tooltipSize.height,
+            alignment: .topLeading
+        )
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(.quaternary, lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
+        .allowsHitTesting(false)
+    }
+
+    static func tooltipPosition(for location: CGPoint, in availableSize: CGSize) -> CGPoint {
+        let tooltipX: CGFloat
+        if location.x + Self.tooltipGap + Self.tooltipSize.width <= availableSize.width {
+            tooltipX = location.x + Self.tooltipGap + Self.tooltipSize.width / 2
+        } else {
+            tooltipX = location.x - Self.tooltipGap - Self.tooltipSize.width / 2
+        }
+
+        return CGPoint(
+            x: min(
+                max(tooltipX, Self.tooltipSize.width / 2),
+                availableSize.width - Self.tooltipSize.width / 2
+            ),
+            y: min(
+                max(location.y, Self.tooltipSize.height / 2),
+                availableSize.height - Self.tooltipSize.height / 2
+            )
+        )
+    }
+
+    private func tokenTooltipRow(_ title: String, value: Int64, color: Color) -> some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(color)
+                .frame(width: 6, height: 6)
+            Text(title)
+            Spacer()
+            Text(value, format: .number.grouping(.automatic))
+                .monospacedDigit()
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+    }
+
+    private func tooltipTitle(for date: Date) -> String {
+        switch range {
+        case .last30Days:
+            date.formatted(.dateTime.month(.defaultDigits).day(.defaultDigits))
+        case .today:
+            date.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)))
+        case .last24Hours:
+            date.formatted(
+                .dateTime
+                    .month(.defaultDigits)
+                    .day(.defaultDigits)
+                    .hour(.twoDigits(amPM: .omitted))
+            )
+        }
+    }
+
+    private func isHighUsageBucket(_ bucket: TokenUsageBucket) -> Bool {
+        bucket.totalTokens >= Self.highUsageThreshold
+    }
+
+    private func chartYUpperBound(for buckets: [TokenUsageBucket]) -> Double {
+        let maximum = buckets.map(\.totalTokens).max() ?? 1
+        return max(1, Double(maximum) * 1.08)
     }
 
     private func chartMessage(_ message: String, systemImage: String) -> some View {
@@ -150,6 +336,11 @@ struct TokenUsageChartView: View {
             date.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)))
         }
     }
+}
+
+private struct TokenUsageHoverState {
+    let bucketStart: Date
+    let location: CGPoint
 }
 
 private struct TokenUsageChartPoint: Identifiable {

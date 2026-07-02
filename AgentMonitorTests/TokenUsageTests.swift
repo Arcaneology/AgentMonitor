@@ -1,3 +1,4 @@
+import CoreGraphics
 import SQLite3
 import XCTest
 @testable import AgentMonitor
@@ -7,6 +8,40 @@ final class TokenUsageTests: XCTestCase {
         XCTAssertEqual(TokenCountFormatter.compact(9_999), "9999")
         XCTAssertEqual(TokenCountFormatter.compact(90_365_523), "9036.55万")
         XCTAssertEqual(TokenCountFormatter.compact(1_572_098_149), "15.72亿")
+    }
+
+    @MainActor
+    func testTooltipStaysCloseAndOpensAwayFromChartEdges() {
+        let availableSize = CGSize(width: 360, height: 156)
+
+        let leftPosition = TokenUsageChartView.tooltipPosition(
+            for: CGPoint(x: 80, y: 78),
+            in: availableSize
+        )
+        XCTAssertEqual(leftPosition, CGPoint(x: 172, y: 78))
+
+        let rightPosition = TokenUsageChartView.tooltipPosition(
+            for: CGPoint(x: 300, y: 78),
+            in: availableSize
+        )
+        XCTAssertEqual(rightPosition, CGPoint(x: 208, y: 78))
+    }
+
+    @MainActor
+    func testTooltipVerticalPositionIsClampedInsideChart() {
+        let availableSize = CGSize(width: 360, height: 156)
+
+        let topPosition = TokenUsageChartView.tooltipPosition(
+            for: CGPoint(x: 80, y: 10),
+            in: availableSize
+        )
+        XCTAssertEqual(topPosition.y, 52)
+
+        let bottomPosition = TokenUsageChartView.tooltipPosition(
+            for: CGPoint(x: 80, y: 150),
+            in: availableSize
+        )
+        XCTAssertEqual(bottomPosition.y, 104)
     }
 
     func testTodayUsesHourlyBucketsAndNormalizesCacheByAppType() throws {

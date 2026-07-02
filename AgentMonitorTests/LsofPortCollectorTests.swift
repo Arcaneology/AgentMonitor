@@ -58,8 +58,24 @@ final class LsofPortCollectorTests: XCTestCase {
         }
     }
 
+    func testUsesTolerantCommandTimeout() async throws {
+        let commandRunner = TimeoutRecordingCommandRunner(result: CommandResult(
+            terminationStatus: 1,
+            standardOutput: Data(),
+            standardError: Data()
+        ))
+        let collector = LsofPortCollector(
+            ownerUID: 501,
+            commandRunner: commandRunner
+        )
+
+        _ = try await collector.collect()
+
+        let timeouts = await commandRunner.recordedTimeouts()
+        XCTAssertEqual(timeouts, [5])
+    }
+
     private func fixture(_ fields: String...) -> Data {
         Data((fields.joined(separator: "\0") + "\0").utf8)
     }
 }
-

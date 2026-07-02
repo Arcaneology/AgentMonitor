@@ -59,6 +59,26 @@ final class LaunchAgentCollectorTests: XCTestCase {
         }
     }
 
+    func testUsesTolerantCommandTimeout() async throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let commandRunner = TimeoutRecordingCommandRunner(result: CommandResult(
+            terminationStatus: 0,
+            standardOutput: Data("PID\tStatus\tLabel\n".utf8),
+            standardError: Data()
+        ))
+        let collector = LaunchAgentCollector(
+            directoryURL: directory,
+            commandRunner: commandRunner
+        )
+
+        _ = try await collector.collect()
+
+        let timeouts = await commandRunner.recordedTimeouts()
+        XCTAssertEqual(timeouts, [5])
+    }
+
     private func makeDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -92,5 +112,27 @@ struct StubCommandRunner: CommandRunning {
         timeout: TimeInterval
     ) async throws -> CommandResult {
         result
+    }
+}
+
+actor TimeoutRecordingCommandRunner: CommandRunning {
+    let result: CommandResult
+    private var timeouts: [TimeInterval] = []
+
+    init(result: CommandResult) {
+        self.result = result
+    }
+
+    func run(
+        executableURL: URL,
+        arguments: [String],
+        timeout: TimeInterval
+    ) async throws -> CommandResult {
+        timeouts.append(timeout)
+        return result
+    }
+
+    func recordedTimeouts() -> [TimeInterval] {
+        timeouts
     }
 }

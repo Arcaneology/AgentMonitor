@@ -17,6 +17,8 @@ struct LaunchAgentCollector: LaunchAgentCollecting {
         case commandFailed(status: Int32, message: String)
     }
 
+    private static let commandTimeout: TimeInterval = 5
+
     private let directoryURL: URL
     private let commandRunner: any CommandRunning
 
@@ -29,7 +31,7 @@ struct LaunchAgentCollector: LaunchAgentCollecting {
         let result = try await commandRunner.run(
             executableURL: URL(fileURLWithPath: "/bin/launchctl"),
             arguments: ["list"],
-            timeout: 2
+            timeout: Self.commandTimeout
         )
         guard result.terminationStatus == 0 else {
             throw Error.commandFailed(

@@ -14,7 +14,7 @@ xcodebuild \
   build
 ```
 
-产物位于 `/tmp/AgentMonitorDerivedData/Build/Products/Debug/AgentMonitor.app`。可将它复制到 `~/Applications` 后启动；首次运行不会请求管理员权限。
+产物位于 `/tmp/AgentMonitorDerivedData/Build/Products/Debug/AgentMonitor.app`。本机已将成品应用放在 `/Applications`，后续更新请覆盖 `/Applications/AgentMonitor.app`；首次运行不会请求管理员权限。
 
 ## Developer ID 归档
 

@@ -6,20 +6,29 @@ final class MonitorStore: ObservableObject {
     @Published private(set) var snapshot = MonitorSnapshot.empty
     @Published private(set) var isRefreshing = false
     @Published private(set) var stoppingServiceIDs: Set<String> = []
+    @Published private(set) var serverModeSnapshot = ServerModeSnapshot.unknown
+    @Published private(set) var isChangingServerMode = false
 
     private let discoverer: any ServiceDiscovering
     private let serviceStopper: (any ServiceStopping)?
+    private let serverModeController: (any ServerModeControlling)?
     private let refreshInterval: Duration
+    private let serverModeRefreshInterval: Duration
     private var refreshTask: Task<Void, Never>?
+    private var serverModeRefreshTask: Task<Void, Never>?
 
     init(
         discoverer: any ServiceDiscovering,
         serviceStopper: (any ServiceStopping)? = nil,
-        refreshInterval: Duration = .seconds(2)
+        serverModeController: (any ServerModeControlling)? = nil,
+        refreshInterval: Duration = .seconds(2),
+        serverModeRefreshInterval: Duration = .seconds(5)
     ) {
         self.discoverer = discoverer
         self.serviceStopper = serviceStopper
+        self.serverModeController = serverModeController
         self.refreshInterval = refreshInterval
+        self.serverModeRefreshInterval = serverModeRefreshInterval
     }
 
     var services: [MonitoredService] { snapshot.services }
@@ -43,6 +52,20 @@ final class MonitorStore: ObservableObject {
                 }
             }
         }
+
+        guard serverModeController != nil else { return }
+        serverModeRefreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                await self.refreshServerMode()
+
+                do {
+                    try await Task.sleep(for: self.serverModeRefreshInterval)
+                } catch {
+                    return
+                }
+            }
+        }
     }
 
     func refresh() async {
@@ -56,6 +79,23 @@ final class MonitorStore: ObservableObject {
     func stopMonitoring() {
         refreshTask?.cancel()
         refreshTask = nil
+        serverModeRefreshTask?.cancel()
+        serverModeRefreshTask = nil
+    }
+
+    func refreshServerMode() async {
+        guard let serverModeController else { return }
+        serverModeSnapshot = await serverModeController.refresh()
+    }
+
+    func setServerModeEnabled(_ enabled: Bool) async {
+        guard let serverModeController else { return }
+        guard !isChangingServerMode else { return }
+
+        isChangingServerMode = true
+        defer { isChangingServerMode = false }
+
+        serverModeSnapshot = await serverModeController.setEnabled(enabled)
     }
 
     func isStopping(_ service: MonitoredService) -> Bool {
