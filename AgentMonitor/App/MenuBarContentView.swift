@@ -9,15 +9,18 @@ struct MenuBarContentView: View {
     @State private var actionPrompt: ActionPrompt?
     @State private var sortOrder: ServiceSortOrder = .nameAscending
     @State private var tokenUsageRange: TokenUsageRange = .today
+    @State private var isServiceMonitorExpanded: Bool
 
     init(
         store: MonitorStore,
         serviceToStop: MonitoredService? = nil,
-        tokenUsageStore: TokenUsageStore = TokenUsageStore()
+        tokenUsageStore: TokenUsageStore = TokenUsageStore(),
+        isServiceMonitorExpanded: Bool = false
     ) {
         self.store = store
         _serviceToStop = State(initialValue: serviceToStop)
         _tokenUsageStore = StateObject(wrappedValue: tokenUsageStore)
+        _isServiceMonitorExpanded = State(initialValue: isServiceMonitorExpanded)
     }
 
     var body: some View {
@@ -25,11 +28,7 @@ struct MenuBarContentView: View {
             header
             Divider()
 
-            if store.snapshot.collectedAt == .distantPast && store.isRefreshing {
-                initialLoading
-            } else {
-                content
-            }
+            content
 
             if let serviceToStop {
                 Divider()
@@ -72,26 +71,14 @@ struct MenuBarContentView: View {
                 .help("立即刷新")
             }
 
-            HStack(spacing: 8) {
-                MetricCard(title: "服务", value: store.serviceCount, color: .blue)
-                MetricCard(title: "端口", value: store.portCount, color: .green)
-                MetricCard(
-                    title: "内存",
-                    value: store.services.reduce(0) { $0 + Int($1.memoryBytes) },
-                    formattedAsBytes: true,
-                    color: .purple
-                )
-            }
-
-            serverModeControl
         }
         .padding(14)
     }
 
-    private var serverModeControl: some View {
+    private var serverModeSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 10) {
-                Label("Server", systemImage: "server.rack")
+                Label("Server 模式", systemImage: "server.rack")
                     .font(.subheadline.weight(.semibold))
 
                 Text(serverModeStatusText)
@@ -129,29 +116,19 @@ struct MenuBarContentView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.65), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private var content: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 14) {
-                if !store.snapshot.issues.isEmpty {
-                    issueBanner
-                }
-
                 TokenUsageChartView(store: tokenUsageStore, range: $tokenUsageRange)
-
-                serviceSection(kind: .localProject, title: "本地项目")
-                serviceSection(kind: .launchAgent, title: "用户 Daemon")
-                serviceSection(kind: .userProcess, title: "其他用户端口")
-
-                if store.services.isEmpty {
-                    emptyState
-                }
+                serverModeSection
+                serviceMonitorSection
             }
             .padding(12)
         }
-        .frame(height: store.services.isEmpty ? 320 : 470)
+        .frame(height: isServiceMonitorExpanded ? 560 : 430)
     }
 
     private var initialLoading: some View {
@@ -179,6 +156,45 @@ struct MenuBarContentView: View {
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.yellow.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var serviceMonitorSection: some View {
+        DisclosureGroup(isExpanded: $isServiceMonitorExpanded) {
+            VStack(alignment: .leading, spacing: 12) {
+                if !store.snapshot.issues.isEmpty {
+                    issueBanner
+                }
+
+                if store.snapshot.collectedAt == .distantPast && store.isRefreshing {
+                    initialLoading
+                } else if store.services.isEmpty {
+                    emptyState
+                } else {
+                    serviceSection(kind: .localProject, title: "本地项目")
+                    serviceSection(kind: .launchAgent, title: "用户 Daemon")
+                    serviceSection(kind: .userProcess, title: "其他用户端口")
+                }
+            }
+            .padding(.top, 10)
+        } label: {
+            HStack(spacing: 10) {
+                Label("服务监测", systemImage: "network")
+                    .font(.subheadline.weight(.semibold))
+
+                Spacer()
+
+                if store.isRefreshing {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+
+                ServiceSummaryBadge(title: "服务", value: store.serviceCount, color: .blue)
+                ServiceSummaryBadge(title: "端口", value: store.portCount, color: .green)
+            }
+            .contentShape(Rectangle())
+        }
+        .padding(10)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.65), in: RoundedRectangle(cornerRadius: 8))
     }
 
     @ViewBuilder
@@ -474,37 +490,24 @@ private enum ActionPrompt {
     case error(String)
 }
 
-private struct MetricCard: View {
+private struct ServiceSummaryBadge: View {
     let title: String
     let value: Int
-    var formattedAsBytes = false
     let color: Color
 
     var body: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: 4) {
             Circle()
                 .fill(color)
-                .frame(width: 7, height: 7)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Text(formattedValue)
-                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                    .monospacedDigit()
-            }
-            Spacer(minLength: 0)
+                .frame(width: 6, height: 6)
+            Text("\(title) \(value)")
+                .font(.caption2.weight(.semibold))
+                .monospacedDigit()
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity)
-        .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 9))
-    }
-
-    private var formattedValue: String {
-        formattedAsBytes
-            ? ByteCountFormatter.string(fromByteCount: Int64(value), countStyle: .memory)
-            : String(value)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(.quaternary.opacity(0.6), in: Capsule())
     }
 }
 

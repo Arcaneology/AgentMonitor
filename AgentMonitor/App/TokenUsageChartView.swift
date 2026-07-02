@@ -37,7 +37,7 @@ struct TokenUsageChartView: View {
                 .frame(height: 156)
 
             HStack {
-                Text("只读自 CC Switch")
+                Text("AgentMonitor 本地记录 · 自动同步 CC Switch")
                 Spacer()
                 if let collectedAt = store.snapshot?.collectedAt {
                     Text(collectedAt.formatted(date: .omitted, time: .shortened))

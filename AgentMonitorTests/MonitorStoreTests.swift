@@ -36,7 +36,7 @@ final class MonitorStoreTests: XCTestCase {
         await firstRefresh.value
     }
 
-    func testMenuContentReservesRoomForServiceRows() async {
+    func testMenuContentCanExpandServiceRows() async {
         let service = makeExampleService()
         let snapshot = MonitorSnapshot(
             services: [service],
@@ -49,12 +49,39 @@ final class MonitorStoreTests: XCTestCase {
 
         let hostingView = NSHostingView(rootView: MenuBarContentView(
             store: store,
-            tokenUsageStore: makeTokenUsageStore()
+            tokenUsageStore: makeTokenUsageStore(),
+            isServiceMonitorExpanded: true
         ))
         hostingView.layoutSubtreeIfNeeded()
 
         let height = hostingView.fittingSize.height
         XCTAssertGreaterThanOrEqual(height, 450, "Menu fitting height was \(height)")
+    }
+
+    func testMenuContentCollapsesServiceRowsByDefault() async {
+        let service = makeExampleService()
+        let snapshot = MonitorSnapshot(
+            services: [service],
+            issues: [],
+            collectedAt: Date(),
+            collectionDuration: 0.04
+        )
+        let store = MonitorStore(discoverer: StaticDiscoverer(snapshot: snapshot))
+        await store.refresh()
+
+        let collapsedView = NSHostingView(rootView: MenuBarContentView(
+            store: store,
+            tokenUsageStore: makeTokenUsageStore()
+        ))
+        let expandedView = NSHostingView(rootView: MenuBarContentView(
+            store: store,
+            tokenUsageStore: makeTokenUsageStore(),
+            isServiceMonitorExpanded: true
+        ))
+        collapsedView.layoutSubtreeIfNeeded()
+        expandedView.layoutSubtreeIfNeeded()
+
+        XCTAssertLessThan(collapsedView.fittingSize.height, expandedView.fittingSize.height)
     }
 
     func testStopConfirmationIsRenderedInsideMenuContent() async {
