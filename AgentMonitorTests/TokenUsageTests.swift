@@ -11,6 +11,39 @@ final class TokenUsageTests: XCTestCase {
     }
 
     @MainActor
+    func testChartAxisIndicesIncludeFirstAndLastBucket() {
+        XCTAssertEqual(
+            TokenUsageChartView.axisIndices(bucketCount: 17, desiredCount: 6),
+            [0, 3, 6, 10, 13, 16]
+        )
+        XCTAssertEqual(
+            TokenUsageChartView.axisIndices(bucketCount: 25, desiredCount: 7),
+            [0, 4, 8, 12, 16, 20, 24]
+        )
+        XCTAssertEqual(
+            TokenUsageChartView.axisIndices(bucketCount: 30, desiredCount: 7),
+            [0, 5, 10, 15, 19, 24, 29]
+        )
+    }
+
+    @MainActor
+    func testChartYUpperBoundHasTenMillionFloor() {
+        let start = Date(timeIntervalSince1970: 0)
+        XCTAssertEqual(
+            TokenUsageChartView.chartYUpperBound(for: [
+                TokenUsageBucket(start: start, inputTokens: 100)
+            ]),
+            10_000_000
+        )
+        XCTAssertEqual(
+            TokenUsageChartView.chartYUpperBound(for: [
+                TokenUsageBucket(start: start, inputTokens: 20_000_000)
+            ]),
+            21_600_000
+        )
+    }
+
+    @MainActor
     func testTooltipStaysCloseAndOpensAwayFromChartEdges() {
         let availableSize = CGSize(width: 360, height: 156)
 
@@ -73,11 +106,14 @@ final class TokenUsageTests: XCTestCase {
             calendar: calendar
         )
 
-        XCTAssertEqual(snapshot.buckets.count, 11)
+        XCTAssertEqual(snapshot.buckets.count, 24)
+        XCTAssertEqual(snapshot.buckets.first?.start, try date("2026-06-22 00:00"))
+        XCTAssertEqual(snapshot.buckets.last?.start, try date("2026-06-22 23:00"))
         XCTAssertEqual(snapshot.buckets[9].inputTokens, 40)
         XCTAssertEqual(snapshot.buckets[9].cacheTokens, 60)
         XCTAssertEqual(snapshot.buckets[10].inputTokens, 20)
         XCTAssertEqual(snapshot.buckets[10].cacheTokens, 30)
+        XCTAssertEqual(snapshot.buckets[11].totalTokens, 0)
         XCTAssertEqual(snapshot.totalTokens, 165)
     }
 
@@ -128,7 +164,7 @@ final class TokenUsageTests: XCTestCase {
         XCTAssertEqual(snapshot.buckets.last?.start, try date("2026-06-22 00:00"))
     }
 
-    func testTokenDatabaseSyncsFromCCSwitchThenReadsLocalRows() async throws {
+    func testTokenDatabaseReadsLocalRowsOnlyUntilManualCCSwitchSync() async throws {
         let localDatabaseURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("\(UUID().uuidString).db")
         let ccSwitchDatabaseURL = FileManager.default.temporaryDirectory
@@ -143,11 +179,19 @@ final class TokenUsageTests: XCTestCase {
             databaseURL: localDatabaseURL,
             ccSwitchDatabaseURL: ccSwitchDatabaseURL
         )
+        let localRecordsBeforeSync = try await database.records(
+            from: Date(timeIntervalSince1970: 1_000),
+            through: Date(timeIntervalSince1970: 3_000)
+        )
+        XCTAssertTrue(localRecordsBeforeSync.isEmpty)
+
+        let syncedCount = try await database.syncFromCCSwitch()
         let records = try await database.records(
             from: Date(timeIntervalSince1970: 1_000),
             through: Date(timeIntervalSince1970: 3_000)
         )
 
+        XCTAssertEqual(syncedCount, 1)
         XCTAssertEqual(records, [
             TokenUsageRecord(
                 timestamp: Date(timeIntervalSince1970: 2_000),
@@ -175,10 +219,7 @@ final class TokenUsageTests: XCTestCase {
             databaseURL: localDatabaseURL,
             ccSwitchDatabaseURL: ccSwitchDatabaseURL
         )
-        _ = try await database.records(
-            from: Date(timeIntervalSince1970: 1_000),
-            through: Date(timeIntervalSince1970: 3_000)
-        )
+        _ = try await database.syncFromCCSwitch()
         try FileManager.default.removeItem(at: ccSwitchDatabaseURL)
 
         let records = try await database.records(

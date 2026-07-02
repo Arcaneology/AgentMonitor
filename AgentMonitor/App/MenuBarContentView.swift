@@ -52,23 +52,6 @@ struct MenuBarContentView: View {
                     .font(.headline)
 
                 Spacer()
-
-                if store.isRefreshing {
-                    ProgressView()
-                        .controlSize(.small)
-                }
-
-                Button {
-                    Task {
-                        await store.refresh()
-                        await tokenUsageStore.refresh(range: tokenUsageRange)
-                    }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .buttonStyle(.borderless)
-                .disabled(store.isRefreshing)
-                .help("立即刷新")
             }
 
         }
@@ -132,11 +115,9 @@ struct MenuBarContentView: View {
     }
 
     private var initialLoading: some View {
-        VStack(spacing: 10) {
-            ProgressView()
-            Text("正在扫描用户服务…")
-                .foregroundStyle(.secondary)
-        }
+        Text("正在扫描用户服务…")
+            .font(.caption)
+            .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity, minHeight: 180)
     }
 
@@ -159,42 +140,56 @@ struct MenuBarContentView: View {
     }
 
     private var serviceMonitorSection: some View {
-        DisclosureGroup(isExpanded: $isServiceMonitorExpanded) {
-            VStack(alignment: .leading, spacing: 12) {
-                if !store.snapshot.issues.isEmpty {
-                    issueBanner
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    isServiceMonitorExpanded.toggle()
                 }
+            } label: {
+                HStack(spacing: 10) {
+                    Label("服务监测", systemImage: "network")
+                        .font(.subheadline.weight(.semibold))
 
-                if store.snapshot.collectedAt == .distantPast && store.isRefreshing {
-                    initialLoading
-                } else if store.services.isEmpty {
-                    emptyState
-                } else {
-                    serviceSection(kind: .localProject, title: "本地项目")
-                    serviceSection(kind: .launchAgent, title: "用户 Daemon")
-                    serviceSection(kind: .userProcess, title: "其他用户端口")
+                    Spacer()
+
+                    ServiceSummaryBadge(title: "服务", value: store.serviceCount, color: .blue)
+                    ServiceSummaryBadge(title: "端口", value: store.portCount, color: .green)
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isServiceMonitorExpanded ? 90 : 0))
+                        .frame(width: 12, height: 12)
                 }
+                .contentShape(Rectangle())
             }
-            .padding(.top, 10)
-        } label: {
-            HStack(spacing: 10) {
-                Label("服务监测", systemImage: "network")
-                    .font(.subheadline.weight(.semibold))
+            .buttonStyle(.plain)
 
-                Spacer()
-
-                if store.isRefreshing {
-                    ProgressView()
-                        .controlSize(.small)
-                }
-
-                ServiceSummaryBadge(title: "服务", value: store.serviceCount, color: .blue)
-                ServiceSummaryBadge(title: "端口", value: store.portCount, color: .green)
+            if isServiceMonitorExpanded {
+                serviceMonitorDetails
+                    .padding(.top, 10)
             }
-            .contentShape(Rectangle())
         }
         .padding(10)
         .background(Color(nsColor: .controlBackgroundColor).opacity(0.65), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var serviceMonitorDetails: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if !store.snapshot.issues.isEmpty {
+                issueBanner
+            }
+
+            if store.snapshot.collectedAt == .distantPast && store.isRefreshing {
+                initialLoading
+            } else if store.services.isEmpty {
+                emptyState
+            } else {
+                serviceSection(kind: .localProject, title: "本地项目")
+                serviceSection(kind: .launchAgent, title: "用户 Daemon")
+                serviceSection(kind: .userProcess, title: "其他用户端口")
+            }
+        }
     }
 
     @ViewBuilder
@@ -366,8 +361,7 @@ struct MenuBarContentView: View {
 
     private var updatedText: String {
         guard store.snapshot.collectedAt != .distantPast else { return "尚未刷新" }
-        let duration = Int(store.snapshot.collectionDuration * 1_000)
-        return "更新于 \(store.snapshot.collectedAt.formatted(date: .omitted, time: .standard)) · \(duration) ms"
+        return "更新于 \(store.snapshot.collectedAt.formatted(date: .omitted, time: .standard))"
     }
 
     private var serverModeStatusText: String {

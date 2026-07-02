@@ -21,8 +21,7 @@ enum TokenUsageRange: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .today:
             let start = calendar.startOfDay(for: now)
-            let currentHour = calendar.dateInterval(of: .hour, for: now)?.start ?? now
-            let end = calendar.date(byAdding: .hour, value: 1, to: currentHour) ?? now
+            let end = calendar.date(byAdding: .day, value: 1, to: start) ?? now
             return TokenUsageWindow(queryStart: start, start: start, displayEnd: end, component: .hour)
         case .last24Hours:
             let queryStart = now.addingTimeInterval(-24 * 60 * 60)
@@ -145,9 +144,6 @@ actor TokenUsageDatabase: TokenUsageReading {
 
     func records(from start: Date, through end: Date) async throws -> [TokenUsageRecord] {
         try ensureLocalDatabase()
-        if fileManager.fileExists(atPath: ccSwitchDatabaseURL.path) {
-            _ = try syncFromCCSwitch()
-        }
 
         var database: OpaquePointer?
         let openStatus = sqlite3_open_v2(
@@ -487,10 +483,12 @@ final class TokenUsageStore: ObservableObject {
     @Published private(set) var snapshot: TokenUsageSnapshot?
     @Published private(set) var errorDescription: String?
     @Published private(set) var isRefreshing = false
+    @Published private(set) var isSyncing = false
 
     private let reader: any TokenUsageReading
     private let calendar: Calendar
     private var requestID = 0
+    let supportsCCSwitchSync: Bool
 
     init(
         reader: any TokenUsageReading = TokenUsageDatabase(),
@@ -498,14 +496,12 @@ final class TokenUsageStore: ObservableObject {
     ) {
         self.reader = reader
         self.calendar = calendar
+        self.supportsCCSwitchSync = reader is TokenUsageDatabase
     }
 
     func refresh(range: TokenUsageRange, now: Date = Date()) async {
         requestID += 1
         let currentRequestID = requestID
-        if snapshot?.range != range {
-            snapshot = nil
-        }
         isRefreshing = true
         errorDescription = nil
         defer {
@@ -527,6 +523,25 @@ final class TokenUsageStore: ObservableObject {
         } catch {
             guard currentRequestID == requestID else { return }
             errorDescription = (error as? LocalizedError)?.errorDescription ?? "无法读取 Token 用量"
+        }
+    }
+
+    func syncFromCCSwitch(range: TokenUsageRange, now: Date = Date()) async {
+        guard !isSyncing else { return }
+        guard let database = reader as? TokenUsageDatabase else {
+            errorDescription = "当前 Token 数据源不支持 CC Switch 同步"
+            return
+        }
+
+        isSyncing = true
+        errorDescription = nil
+        defer { isSyncing = false }
+
+        do {
+            _ = try await database.syncFromCCSwitch()
+            await refresh(range: range, now: now)
+        } catch {
+            errorDescription = (error as? LocalizedError)?.errorDescription ?? "无法同步 CC Switch 数据"
         }
     }
 }

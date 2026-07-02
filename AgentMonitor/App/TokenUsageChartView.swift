@@ -24,6 +24,17 @@ struct TokenUsageChartView: View {
                         .font(.system(.title3, design: .rounded, weight: .bold))
                         .monospacedDigit()
                 }
+
+                if store.supportsCCSwitchSync {
+                    Button {
+                        Task { await store.syncFromCCSwitch(range: range) }
+                    } label: {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(store.isSyncing)
+                    .help("从 CC Switch 同步 Token 记录")
+                }
             }
 
             Picker("时间范围", selection: $range) {
@@ -37,7 +48,7 @@ struct TokenUsageChartView: View {
                 .frame(height: 156)
 
             HStack {
-                Text("AgentMonitor 本地记录 · 自动同步 CC Switch")
+                Text("AgentMonitor 本地记录 · 手动同步 CC Switch")
                 Spacer()
                 if let collectedAt = store.snapshot?.collectedAt {
                     Text(collectedAt.formatted(date: .omitted, time: .shortened))
@@ -82,27 +93,47 @@ struct TokenUsageChartView: View {
                 usageChart(snapshot)
             }
         } else {
-            VStack(spacing: 8) {
-                ProgressView()
-                    .controlSize(.small)
-                Text("正在读取 CC Switch…")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            chartMessage("正在读取本地 Token 记录", systemImage: "chart.bar")
         }
     }
 
     private func usageChart(_ snapshot: TokenUsageSnapshot) -> some View {
-        let points = snapshot.buckets.flatMap(TokenUsageChartPoint.points)
-        let highUsageBuckets = range == .last30Days
-            ? snapshot.buckets.filter(isHighUsageBucket)
+        let indexedBuckets = snapshot.buckets.enumerated().map { index, bucket in
+            IndexedTokenUsageBucket(index: index, bucket: bucket)
+        }
+        let points = indexedBuckets.flatMap(TokenUsageChartPoint.points)
+        let highUsageBuckets = snapshot.range == .last30Days
+            ? indexedBuckets.filter { isHighUsageBucket($0.bucket) }
             : []
+        let futureBuckets = futureBuckets(in: indexedBuckets, snapshot: snapshot)
 
-        return Chart {
+        return chartView(
+            snapshot: snapshot,
+            indexedBuckets: indexedBuckets,
+            points: points,
+            highUsageBuckets: highUsageBuckets,
+            futureBuckets: futureBuckets
+        )
+        .id(snapshot.range)
+        .accessibilityLabel("Token 用量柱状图，合计 \(snapshot.totalTokens) Tokens")
+    }
+
+    private func chartView(
+        snapshot: TokenUsageSnapshot,
+        indexedBuckets: [IndexedTokenUsageBucket],
+        points: [TokenUsageChartPoint],
+        highUsageBuckets: [IndexedTokenUsageBucket],
+        futureBuckets: [IndexedTokenUsageBucket]
+    ) -> some View {
+        Chart {
+            ForEach(indexedBuckets) { bucket in
+                RuleMark(x: .value("时间", bucket.xValue))
+                    .foregroundStyle(.clear)
+            }
+
             ForEach(points) { point in
                 BarMark(
-                    x: .value("时间", point.date),
+                    x: .value("时间", point.bucketX),
                     y: .value("Tokens", Double(point.tokens))
                 )
                 .foregroundStyle(by: .value("类型", point.category.title))
@@ -111,11 +142,17 @@ struct TokenUsageChartView: View {
 
             ForEach(highUsageBuckets) { bucket in
                 PointMark(
-                    x: .value("时间", bucket.start),
-                    y: .value("Tokens", Double(bucket.totalTokens))
+                    x: .value("时间", bucket.xValue),
+                    y: .value("Tokens", Double(bucket.bucket.totalTokens))
                 )
                 .foregroundStyle(.yellow)
                 .symbolSize(42)
+            }
+
+            ForEach(futureBuckets) { bucket in
+                RuleMark(x: .value("未到时间", bucket.xValue))
+                    .foregroundStyle(.secondary.opacity(0.22))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 4]))
             }
         }
         .chartForegroundStyleScale(
@@ -123,13 +160,17 @@ struct TokenUsageChartView: View {
             range: TokenUsageCategory.allCases.map(\.color)
         )
         .chartLegend(position: .bottom, alignment: .leading, spacing: 10)
-        .chartXScale(range: .plotDimension(startPadding: 8, endPadding: 20))
-        .chartYScale(domain: 0...chartYUpperBound(for: snapshot.buckets))
+        .chartXScale(
+            domain: chartXDomain(bucketCount: indexedBuckets.count),
+            range: .plotDimension(startPadding: 10, endPadding: 10)
+        )
+        .chartYScale(domain: 0...Self.chartYUpperBound(for: snapshot.buckets))
         .chartXAxis {
-            AxisMarks(values: axisDates(snapshot.buckets)) { value in
+            AxisMarks(values: axisValues(indexedBuckets, range: snapshot.range)) { value in
                 AxisValueLabel {
-                    if let date = value.as(Date.self) {
-                        Text(axisLabel(for: date))
+                    if let xValue = value.as(Double.self),
+                       let bucket = bucket(for: xValue, in: indexedBuckets) {
+                        Text(axisLabel(for: bucket.start, range: snapshot.range))
                     }
                 }
             }
@@ -146,12 +187,11 @@ struct TokenUsageChartView: View {
             }
         }
         .chartOverlay { proxy in
-            chartHoverOverlay(proxy: proxy, buckets: snapshot.buckets)
+            chartHoverOverlay(proxy: proxy, snapshot: snapshot)
         }
-        .accessibilityLabel("Token 用量柱状图，合计 \(snapshot.totalTokens) Tokens")
     }
 
-    private func chartHoverOverlay(proxy: ChartProxy, buckets: [TokenUsageBucket]) -> some View {
+    private func chartHoverOverlay(proxy: ChartProxy, snapshot: TokenUsageSnapshot) -> some View {
         GeometryReader { geometry in
             if let plotFrame = proxy.plotFrame {
                 let plotRect = geometry[plotFrame]
@@ -162,8 +202,9 @@ struct TokenUsageChartView: View {
                         .contentShape(Rectangle())
 
                     if let hoverState,
-                       let bucket = buckets.first(where: { $0.start == hoverState.bucketStart }) {
-                        if let lineX = proxy.position(forX: bucket.start) {
+                       snapshot.buckets.indices.contains(hoverState.bucketIndex) {
+                        let bucket = snapshot.buckets[hoverState.bucketIndex]
+                        if let lineX = proxy.position(forX: Double(hoverState.bucketIndex)) {
                             Path { path in
                                 let x = plotRect.minX + lineX
                                 path.move(to: CGPoint(x: x, y: plotRect.minY))
@@ -176,7 +217,7 @@ struct TokenUsageChartView: View {
                             .allowsHitTesting(false)
                         }
 
-                        tokenTooltip(for: bucket)
+                        tokenTooltip(for: bucket, range: snapshot.range)
                             .position(Self.tooltipPosition(
                                 for: hoverState.location,
                                 in: geometry.size
@@ -187,19 +228,16 @@ struct TokenUsageChartView: View {
                     switch phase {
                     case let .active(location):
                         guard plotRect.contains(location),
-                              let date = proxy.value(
-                                atX: location.x - plotRect.origin.x,
-                                as: Date.self
-                              ),
-                              let bucket = buckets.min(by: {
-                                abs($0.start.timeIntervalSince(date))
-                                    < abs($1.start.timeIntervalSince(date))
-                              }) else {
+                              let bucketIndex = nearestBucketIndex(
+                                to: location.x - plotRect.origin.x,
+                                proxy: proxy,
+                                bucketCount: snapshot.buckets.count
+                              ) else {
                             hoverState = nil
                             return
                         }
                         hoverState = TokenUsageHoverState(
-                            bucketStart: bucket.start,
+                            bucketIndex: bucketIndex,
                             location: location
                         )
                     case .ended:
@@ -210,10 +248,10 @@ struct TokenUsageChartView: View {
         }
     }
 
-    private func tokenTooltip(for bucket: TokenUsageBucket) -> some View {
+    private func tokenTooltip(for bucket: TokenUsageBucket, range: TokenUsageRange) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 6) {
-                Text(tooltipTitle(for: bucket.start))
+                Text(tooltipTitle(for: bucket.start, range: range))
                     .font(.caption.weight(.semibold))
 
                 Spacer(minLength: 4)
@@ -289,7 +327,7 @@ struct TokenUsageChartView: View {
         .foregroundStyle(.secondary)
     }
 
-    private func tooltipTitle(for date: Date) -> String {
+    private func tooltipTitle(for date: Date, range: TokenUsageRange) -> String {
         switch range {
         case .last30Days:
             date.formatted(.dateTime.month(.defaultDigits).day(.defaultDigits))
@@ -309,9 +347,23 @@ struct TokenUsageChartView: View {
         bucket.totalTokens >= Self.highUsageThreshold
     }
 
-    private func chartYUpperBound(for buckets: [TokenUsageBucket]) -> Double {
+    static func chartYUpperBound(for buckets: [TokenUsageBucket]) -> Double {
         let maximum = buckets.map(\.totalTokens).max() ?? 1
-        return max(1, Double(maximum) * 1.08)
+        return max(10_000_000, Double(maximum) * 1.08)
+    }
+
+    private func futureBuckets(
+        in buckets: [IndexedTokenUsageBucket],
+        snapshot: TokenUsageSnapshot
+    ) -> [IndexedTokenUsageBucket] {
+        guard snapshot.range == .today,
+              let currentHour = Calendar.current.dateInterval(
+                of: .hour,
+                for: snapshot.collectedAt
+              )?.start else {
+            return []
+        }
+        return buckets.filter { $0.bucket.start > currentHour }
     }
 
     private func chartMessage(_ message: String, systemImage: String) -> some View {
@@ -321,14 +373,74 @@ struct TokenUsageChartView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func axisDates(_ buckets: [TokenUsageBucket]) -> [Date] {
+    private func axisValues(_ buckets: [IndexedTokenUsageBucket], range: TokenUsageRange) -> [Double] {
         guard !buckets.isEmpty else { return [] }
-        let desiredCount = range == .last30Days ? 5 : 4
-        let step = max(1, (buckets.count - 1) / max(1, desiredCount - 1))
-        return stride(from: 0, to: buckets.count, by: step).map { buckets[$0].start }
+        switch range {
+        case .today:
+            return Self.axisIndices(bucketCount: buckets.count, desiredCount: 7)
+                .map(Double.init)
+        case .last24Hours:
+            return Self.stridingAxisIndices(bucketCount: buckets.count, step: 2)
+                .map(Double.init)
+        case .last30Days:
+            return Self.stridingAxisIndices(bucketCount: buckets.count, step: 3)
+                .map(Double.init)
+        }
     }
 
-    private func axisLabel(for date: Date) -> String {
+    static func axisIndices(bucketCount: Int, desiredCount: Int) -> [Int] {
+        guard bucketCount > 0 else { return [] }
+        guard bucketCount > desiredCount, desiredCount > 1 else {
+            return Array(0..<bucketCount)
+        }
+
+        let step = Double(bucketCount - 1) / Double(desiredCount - 1)
+        return (0..<desiredCount).reduce(into: [Int]()) { indices, offset in
+            let index = Int((Double(offset) * step).rounded())
+            if indices.last != index {
+                indices.append(index)
+            }
+        }
+    }
+
+    static func stridingAxisIndices(bucketCount: Int, step: Int) -> [Int] {
+        guard bucketCount > 0 else { return [] }
+        let safeStep = max(1, step)
+        var indices = Array(stride(from: 0, to: bucketCount, by: safeStep))
+        let lastIndex = bucketCount - 1
+        if indices.last != lastIndex {
+            indices.append(lastIndex)
+        }
+        return indices
+    }
+
+    private func chartXDomain(bucketCount: Int) -> ClosedRange<Double> {
+        -0.5...max(0.5, Double(bucketCount) - 0.5)
+    }
+
+    private func bucket(
+        for xValue: Double,
+        in buckets: [IndexedTokenUsageBucket]
+    ) -> TokenUsageBucket? {
+        let index = Int(xValue.rounded())
+        guard buckets.indices.contains(index) else { return nil }
+        return buckets[index].bucket
+    }
+
+    private func nearestBucketIndex(
+        to xPosition: CGFloat,
+        proxy: ChartProxy,
+        bucketCount: Int
+    ) -> Int? {
+        guard bucketCount > 0 else { return nil }
+        return (0..<bucketCount).min { lhs, rhs in
+            let lhsX = proxy.position(forX: Double(lhs)) ?? 0
+            let rhsX = proxy.position(forX: Double(rhs)) ?? 0
+            return abs(lhsX - xPosition) < abs(rhsX - xPosition)
+        }
+    }
+
+    private func axisLabel(for date: Date, range: TokenUsageRange) -> String {
         switch range {
         case .last30Days:
             date.formatted(.dateTime.month(.defaultDigits).day(.defaultDigits))
@@ -339,22 +451,47 @@ struct TokenUsageChartView: View {
 }
 
 private struct TokenUsageHoverState {
-    let bucketStart: Date
+    let bucketIndex: Int
     let location: CGPoint
 }
 
+private struct IndexedTokenUsageBucket: Identifiable {
+    let index: Int
+    let bucket: TokenUsageBucket
+
+    var id: Date { bucket.start }
+    var xValue: Double { Double(index) }
+}
+
 private struct TokenUsageChartPoint: Identifiable {
-    let date: Date
+    let bucketStart: Date
+    let bucketX: Double
     let category: TokenUsageCategory
     let tokens: Int64
 
-    var id: String { "\(date.timeIntervalSince1970)-\(category.rawValue)" }
+    var id: String { "\(bucketStart.timeIntervalSince1970)-\(category.rawValue)" }
 
-    static func points(for bucket: TokenUsageBucket) -> [Self] {
-        [
-            Self(date: bucket.start, category: .input, tokens: bucket.inputTokens),
-            Self(date: bucket.start, category: .cache, tokens: bucket.cacheTokens),
-            Self(date: bucket.start, category: .output, tokens: bucket.outputTokens)
+    static func points(for indexedBucket: IndexedTokenUsageBucket) -> [Self] {
+        let bucket = indexedBucket.bucket
+        return [
+            Self(
+                bucketStart: bucket.start,
+                bucketX: indexedBucket.xValue,
+                category: .input,
+                tokens: bucket.inputTokens
+            ),
+            Self(
+                bucketStart: bucket.start,
+                bucketX: indexedBucket.xValue,
+                category: .cache,
+                tokens: bucket.cacheTokens
+            ),
+            Self(
+                bucketStart: bucket.start,
+                bucketX: indexedBucket.xValue,
+                category: .output,
+                tokens: bucket.outputTokens
+            )
         ]
     }
 }
