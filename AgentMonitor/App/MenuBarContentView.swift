@@ -58,15 +58,15 @@ struct MenuBarContentView: View {
         .padding(14)
     }
 
-    private var serverModeSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
+    private var powerModeSection: some View {
+        VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 10) {
-                Label("Server 模式", systemImage: "server.rack")
+                Label("电源模式", systemImage: "powerplug")
                     .font(.subheadline.weight(.semibold))
 
-                Text(serverModeStatusText)
+                Text(powerModeStatusText)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(serverModeStatusColor)
+                    .foregroundStyle(powerModeStatusColor)
 
                 Spacer()
 
@@ -74,21 +74,49 @@ struct MenuBarContentView: View {
                     ProgressView()
                         .controlSize(.small)
                 }
-
-                Toggle(
-                    "",
-                    isOn: Binding(
-                        get: { store.serverModeSnapshot.isEnabled },
-                        set: { enabled in
-                            Task { await store.setServerModeEnabled(enabled) }
-                        }
-                    )
-                )
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .disabled(store.isChangingServerMode)
-                .help("切换 Server 保活模式")
             }
+
+            Picker(
+                "电源模式",
+                selection: Binding(
+                    get: { store.serverModeSnapshot.displayedPowerMode },
+                    set: { mode in store.selectPowerMode(mode) }
+                )
+            ) {
+                Text("Normal").tag(PowerMode.normal)
+                Text("Server").tag(PowerMode.server)
+                Text("Sleep").tag(PowerMode.sleep)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .disabled(store.isChangingServerMode)
+            .help("切换电源模式")
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("定时")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(nextPowerModeEventText)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+
+                powerModeScheduleRow(
+                    rule: store.serverModeSnapshot.schedule.nightlySleep,
+                    title: "Sleep",
+                    subtitle: "每天",
+                    systemImage: "moon.zzz"
+                )
+                powerModeScheduleRow(
+                    rule: store.serverModeSnapshot.schedule.workdayServer,
+                    title: "Server",
+                    subtitle: "工作日",
+                    systemImage: "server.rack"
+                )
+            }
+            .padding(.top, 2)
 
             if let message = store.serverModeSnapshot.message {
                 Text(message)
@@ -106,12 +134,12 @@ struct MenuBarContentView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 14) {
                 TokenUsageChartView(store: tokenUsageStore, range: $tokenUsageRange)
-                serverModeSection
+                powerModeSection
                 serviceMonitorSection
             }
             .padding(12)
         }
-        .frame(height: isServiceMonitorExpanded ? 560 : 430)
+        .frame(height: isServiceMonitorExpanded ? 600 : 480)
     }
 
     private var initialLoading: some View {
@@ -364,20 +392,114 @@ struct MenuBarContentView: View {
         return "更新于 \(store.snapshot.collectedAt.formatted(date: .omitted, time: .standard))"
     }
 
-    private var serverModeStatusText: String {
-        switch store.serverModeSnapshot.state {
-        case .enabled: "开"
-        case .disabled: "关"
+    private var powerModeStatusText: String {
+        switch store.serverModeSnapshot.effectiveMode {
+        case .server: "Server 生效"
+        case .sleep: "Sleep 待机"
+        case .normal: "Normal"
         case .unknown: "未知"
         }
     }
 
-    private var serverModeStatusColor: Color {
-        switch store.serverModeSnapshot.state {
-        case .enabled: .green
-        case .disabled: .secondary
+    private var powerModeStatusColor: Color {
+        switch store.serverModeSnapshot.effectiveMode {
+        case .server: .green
+        case .sleep: .blue
+        case .normal: .secondary
         case .unknown: .orange
         }
+    }
+
+    private var nextPowerModeEventText: String {
+        guard let event = store.serverModeSnapshot.schedule.nextEvent(after: Date(), calendar: .current) else {
+            return "未开启"
+        }
+        return "\(event.mode.title) \(event.date.formatted(date: .omitted, time: .shortened))"
+    }
+
+    private func powerModeScheduleRow(
+        rule: PowerModeScheduleRule,
+        title: String,
+        subtitle: String,
+        systemImage: String
+    ) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                Text(subtitle)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            DatePicker(
+                "",
+                selection: Binding(
+                    get: { dateForScheduleRule(rule) },
+                    set: { date in updateScheduleTime(rule.id, date: date) }
+                ),
+                displayedComponents: .hourAndMinute
+            )
+            .labelsHidden()
+            .datePickerStyle(.compact)
+            .frame(width: 82)
+
+            Toggle(
+                "",
+                isOn: Binding(
+                    get: { rule.isEnabled },
+                    set: { isEnabled in updateScheduleEnabled(rule.id, isEnabled: isEnabled) }
+                )
+            )
+            .labelsHidden()
+            .toggleStyle(.switch)
+            .controlSize(.small)
+        }
+        .disabled(store.isChangingServerMode)
+    }
+
+    private func dateForScheduleRule(_ rule: PowerModeScheduleRule) -> Date {
+        var components = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+        components.hour = rule.hour
+        components.minute = rule.minute
+        components.second = 0
+        return Calendar.current.date(from: components) ?? Date()
+    }
+
+    private func updateScheduleEnabled(_ id: PowerModeScheduleRuleID, isEnabled: Bool) {
+        updateScheduleRule(id) { rule in
+            rule.isEnabled = isEnabled
+        }
+    }
+
+    private func updateScheduleTime(_ id: PowerModeScheduleRuleID, date: Date) {
+        let components = Calendar.current.dateComponents([.hour, .minute], from: date)
+        updateScheduleRule(id) { rule in
+            rule.hour = components.hour ?? rule.hour
+            rule.minute = components.minute ?? rule.minute
+        }
+    }
+
+    private func updateScheduleRule(_ id: PowerModeScheduleRuleID, update: (inout PowerModeScheduleRule) -> Void) {
+        var schedule = store.serverModeSnapshot.schedule
+        var rule: PowerModeScheduleRule
+        switch id {
+        case .nightlySleep:
+            rule = schedule.nightlySleep
+        case .workdayServer:
+            rule = schedule.workdayServer
+        }
+
+        update(&rule)
+        schedule = schedule.updatingRule(rule)
+        Task { await store.updatePowerModeSchedule(schedule) }
     }
 
     private func issueDescription(_ issue: MonitorIssue) -> String {

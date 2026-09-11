@@ -16,13 +16,15 @@ final class MonitorStore: ObservableObject {
     private let serverModeRefreshInterval: Duration
     private var refreshTask: Task<Void, Never>?
     private var serverModeRefreshTask: Task<Void, Never>?
+    private var refreshInFlight = false
+    private var pendingPowerMode: PowerMode?
 
     init(
         discoverer: any ServiceDiscovering,
         serviceStopper: (any ServiceStopping)? = nil,
         serverModeController: (any ServerModeControlling)? = nil,
-        refreshInterval: Duration = .seconds(2),
-        serverModeRefreshInterval: Duration = .seconds(5)
+        refreshInterval: Duration = .seconds(10),
+        serverModeRefreshInterval: Duration = .seconds(30)
     ) {
         self.discoverer = discoverer
         self.serviceStopper = serviceStopper
@@ -69,11 +71,30 @@ final class MonitorStore: ObservableObject {
     }
 
     func refresh() async {
-        guard !isRefreshing else { return }
-        isRefreshing = true
-        defer { isRefreshing = false }
+        guard !refreshInFlight else { return }
+        refreshInFlight = true
 
-        snapshot = await discoverer.discover()
+        let showsInitialLoading = snapshot.collectedAt == .distantPast
+        if showsInitialLoading {
+            isRefreshing = true
+        }
+        defer {
+            refreshInFlight = false
+            if showsInitialLoading {
+                isRefreshing = false
+            }
+        }
+
+        let nextSnapshot = await discoverer.discover()
+        if shouldPublish(nextSnapshot) {
+            snapshot = nextSnapshot
+        }
+    }
+
+    private func shouldPublish(_ nextSnapshot: MonitorSnapshot) -> Bool {
+        snapshot.collectedAt == .distantPast
+            || snapshot.services != nextSnapshot.services
+            || snapshot.issues != nextSnapshot.issues
     }
 
     func stopMonitoring() {
@@ -85,17 +106,73 @@ final class MonitorStore: ObservableObject {
 
     func refreshServerMode() async {
         guard let serverModeController else { return }
-        serverModeSnapshot = await serverModeController.refresh()
+        guard !isChangingServerMode else { return }
+        if let scheduledSnapshot = await serverModeController.reconcileSchedule(now: Date()) {
+            serverModeSnapshot = scheduledSnapshot
+        } else {
+            serverModeSnapshot = await serverModeController.refresh()
+        }
     }
 
     func setServerModeEnabled(_ enabled: Bool) async {
+        await setPowerMode(enabled ? .server : .normal)
+    }
+
+    func selectPowerMode(_ mode: PowerMode) {
+        previewRequestedMode(mode)
+        if isChangingServerMode {
+            pendingPowerMode = mode
+            return
+        }
+        isChangingServerMode = true
+        Task { await applyPowerMode(mode) }
+    }
+
+    func setPowerMode(_ mode: PowerMode) async {
+        previewRequestedMode(mode)
+        if isChangingServerMode {
+            pendingPowerMode = mode
+            while isChangingServerMode {
+                await Task.yield()
+            }
+            return
+        }
+        await applyPowerMode(mode)
+    }
+
+    private func previewRequestedMode(_ mode: PowerMode) {
+        guard serverModeController != nil else { return }
+        var preview = serverModeSnapshot
+        preview.requestedMode = mode
+        preview.effectiveMode = switch mode {
+        case .server: .server
+        case .sleep: .sleep
+        case .normal: .normal
+        }
+        preview.message = nil
+        serverModeSnapshot = preview
+    }
+
+    private func applyPowerMode(_ mode: PowerMode) async {
+        defer { isChangingServerMode = false }
+        guard let serverModeController else { return }
+
+        var snapshot = await serverModeController.setMode(mode)
+        while let pending = pendingPowerMode {
+            pendingPowerMode = nil
+            snapshot = await serverModeController.setMode(pending)
+        }
+        serverModeSnapshot = snapshot
+    }
+
+    func updatePowerModeSchedule(_ schedule: PowerModeSchedule) async {
         guard let serverModeController else { return }
         guard !isChangingServerMode else { return }
 
         isChangingServerMode = true
         defer { isChangingServerMode = false }
 
-        serverModeSnapshot = await serverModeController.setEnabled(enabled)
+        serverModeSnapshot = await serverModeController.setSchedule(schedule, now: Date())
     }
 
     func isStopping(_ service: MonitoredService) -> Bool {

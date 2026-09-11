@@ -14,7 +14,7 @@ xcodebuild \
   build
 ```
 
-产物位于 `/tmp/AgentMonitorDerivedData/Build/Products/Debug/AgentMonitor.app`。本机已将成品应用放在 `/Applications`，后续更新请覆盖 `/Applications/AgentMonitor.app`；首次运行不会请求管理员权限。
+产物位于 `/tmp/AgentMonitorDerivedData/Build/Products/Debug/AgentMonitor.app`。`Release` 构建成功后会自动覆盖安装到 `/Applications/AgentMonitor.app`；首次运行不会请求管理员权限。当前日常使用的就是 `/Applications` 里这份应用，安装后需要重新打开它才会加载新版本。
 
 ## Developer ID 归档
 
@@ -74,3 +74,9 @@ spctl --assess --type execute --verbose=4 \
 装订后重新生成最终分发压缩包，确保离线 Gatekeeper 验证也能找到公证票据。
 
 当前仓库已验证未签名 Release 构建；Developer ID 签名与 Apple 公证尚未执行，因为它们需要发布者自己的证书和 Apple 凭据。
+
+## 本机替换与回退
+
+Release 安装脚本会先将完整应用写入临时目录，确认可执行文件存在后，正常退出正在运行的旧实例，再替换安装。旧版本保留在构建日志输出的 `/Applications/.AgentMonitor-install.*/AgentMonitor.previous.app` 路径；失败会尝试恢复原位置。安装不再自动切换前台，完成后重新打开应用。
+
+2026-09-12：新版 Release 构建及安装成功，安装后再次验证完整 106 项测试通过。旧应用备份保留。Token 数据库在首次打开用量面板、触发刷新时自动备份并迁移；此前的副本核验和详细结果见 Token 验收说明。

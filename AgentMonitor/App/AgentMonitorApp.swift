@@ -6,39 +6,67 @@ import SwiftUI
 @MainActor
 struct AgentMonitorApp: App {
     @StateObject private var store: MonitorStore
+    @StateObject private var temperatureStore: TemperatureStore
+    @StateObject private var heavyProcessStore: HeavyProcessStore
+    @StateObject private var tokenUsageStore: TokenUsageStore
 
     init() {
-        let store = AppDependencies.makeMonitorStore()
-        _store = StateObject(wrappedValue: store)
-        store.start()
+        let dependencies = AppDependencies.make()
+        _store = StateObject(wrappedValue: dependencies.store)
+        _temperatureStore = StateObject(wrappedValue: dependencies.temperatureStore)
+        _heavyProcessStore = StateObject(wrappedValue: dependencies.heavyProcessStore)
 #if AGENT_MONITOR_QA
-        QAWindowPresenter.present(store: store)
+        _tokenUsageStore = StateObject(wrappedValue: TokenUsageStore(reader: TokenUsageQAFixtureReader()))
+#else
+        _tokenUsageStore = StateObject(wrappedValue: TokenUsageStore())
+#endif
+        // Hosted unit tests exercise injected stores. Do not also start the
+        // real user's scheduled power controller and collectors in the host.
+        let isTestHost = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        if !isTestHost {
+            dependencies.store.start()
+            dependencies.temperatureStore.start()
+            dependencies.heavyProcessStore.start()
+        }
+#if AGENT_MONITOR_QA
+        QAWindowPresenter.present(store: dependencies.store)
 #endif
     }
 
     var body: some Scene {
         MenuBarExtra {
-            MenuBarContentView(store: store)
+            MenuBarContentView(store: store, tokenUsageStore: tokenUsageStore)
         } label: {
-            Label("\(store.portCount) · Server \(serverModeMenuText)", systemImage: serverModeMenuIcon)
-                .accessibilityLabel("Agent Monitor，\(store.portCount) 个端口，Server \(serverModeMenuText)")
+            Label("\(store.portCount) · \(powerModeMenuText)", systemImage: powerModeMenuIcon)
+                .accessibilityLabel("Agent Monitor，\(store.portCount) 个端口，\(powerModeMenuText)")
         }
         .menuBarExtraStyle(.window)
 
+        MenuBarExtra {
+            TemperatureMenuView(
+                temperatureStore: temperatureStore,
+                processStore: heavyProcessStore
+            )
+        } label: {
+            TemperatureMenuBarLabel(store: temperatureStore)
+        }
+        .menuBarExtraStyle(.window)
     }
 
-    private var serverModeMenuText: String {
-        switch store.serverModeSnapshot.state {
-        case .enabled: "开"
-        case .disabled: "关"
+    private var powerModeMenuText: String {
+        switch store.serverModeSnapshot.effectiveMode {
+        case .server: "Server"
+        case .sleep: "Sleep"
+        case .normal: "Normal"
         case .unknown: "未知"
         }
     }
 
-    private var serverModeMenuIcon: String {
-        switch store.serverModeSnapshot.state {
-        case .enabled: "server.rack"
-        case .disabled: "network"
+    private var powerModeMenuIcon: String {
+        switch store.serverModeSnapshot.effectiveMode {
+        case .server: "server.rack"
+        case .sleep: "moon.zzz"
+        case .normal: "network"
         case .unknown: "questionmark.circle"
         }
     }
@@ -52,13 +80,13 @@ private enum QAWindowPresenter {
     static func present(store: MonitorStore) {
         DispatchQueue.main.async {
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 420, height: 620),
+                contentRect: NSRect(x: 0, y: 0, width: 420, height: 730),
                 styleMask: [.titled, .closable],
                 backing: .buffered,
                 defer: false
             )
             window.title = "Agent Monitor QA"
-            window.contentView = NSHostingView(rootView: MenuBarContentView(store: store))
+            window.contentView = NSHostingView(rootView: TokenUsageQAView(store: store))
             window.isReleasedWhenClosed = false
             window.center()
             window.orderBack(nil)
@@ -70,7 +98,14 @@ private enum QAWindowPresenter {
 
 private enum AppDependencies {
     @MainActor
-    static func makeMonitorStore() -> MonitorStore {
+    struct Runtime {
+        let store: MonitorStore
+        let temperatureStore: TemperatureStore
+        let heavyProcessStore: HeavyProcessStore
+    }
+
+    @MainActor
+    static func make() -> Runtime {
         let ownerUID = getuid()
         let commandRunner = SystemCommandRunner()
         let processCollector = DarwinProcessCollector(ownerUID: ownerUID)
@@ -94,11 +129,27 @@ private enum AppDependencies {
             processSignaler: SystemProcessSignaler(),
             commandRunner: commandRunner
         )
+#if AGENT_MONITOR_QA
+        let store = MonitorStore(discoverer: discoveryEngine)
+#else
         let serverModeController = ServerModeController(commandRunner: commandRunner)
-        return MonitorStore(
+        let store = MonitorStore(
             discoverer: discoveryEngine,
             serviceStopper: serviceStopper,
             serverModeController: serverModeController
+        )
+#endif
+        let heavyProcessStore = HeavyProcessStore(
+            collector: DarwinProcessResourceCollector(ownerUID: ownerUID),
+            terminator: HeavyProcessTerminator(
+                ownerUID: ownerUID,
+                processCollector: processCollector
+            )
+        )
+        return Runtime(
+            store: store,
+            temperatureStore: TemperatureStore(),
+            heavyProcessStore: heavyProcessStore
         )
     }
 }

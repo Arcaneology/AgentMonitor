@@ -10,6 +10,7 @@
 		A00100000000000000000001 /* AgentMonitorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000001 /* AgentMonitorApp.swift */; };
 		A00200000000000000000001 /* MenuBarContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00200000000000000000001 /* MenuBarContentView.swift */; };
 		A00300000000000000000001 /* TokenUsageChartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00400000000000000000001 /* TokenUsageChartView.swift */; };
+		A00400000000000000000001 /* TemperatureChartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00500000000000000000001 /* TemperatureChartView.swift */; };
 		A10100000000000000000001 /* ListeningEndpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10100000000000000000001 /* ListeningEndpoint.swift */; };
 		A10200000000000000000001 /* MonitoredProcess.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10200000000000000000001 /* MonitoredProcess.swift */; };
 		A10300000000000000000001 /* MonitoredService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10300000000000000000001 /* MonitoredService.swift */; };
@@ -18,13 +19,16 @@
 		A10600000000000000000001 /* SystemCommandRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10600000000000000000001 /* SystemCommandRunner.swift */; };
 		A10700000000000000000001 /* LsofPortCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10700000000000000000001 /* LsofPortCollector.swift */; };
 		A10800000000000000000001 /* DarwinProcessCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10800000000000000000001 /* DarwinProcessCollector.swift */; };
+		A11700000000000000000001 /* HeavyProcessCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11700000000000000000001 /* HeavyProcessCollector.swift */; };
 		A10900000000000000000001 /* LaunchAgentCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10900000000000000000001 /* LaunchAgentCollector.swift */; };
 		A11000000000000000000001 /* ProjectResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11000000000000000000001 /* ProjectResolver.swift */; };
 		A11100000000000000000001 /* ServiceDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11100000000000000000001 /* ServiceDiscovery.swift */; };
 		A11200000000000000000001 /* MonitorStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11200000000000000000001 /* MonitorStore.swift */; };
 		A11300000000000000000001 /* ServiceStopController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11300000000000000000001 /* ServiceStopController.swift */; };
 		A11400000000000000000001 /* CCTokenUsageReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11400000000000000000001 /* CCTokenUsageReader.swift */; };
+		A11800000000000000000001 /* SessionUsageScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11800000000000000000001 /* SessionUsageScanner.swift */; };
 		A11500000000000000000001 /* ServerModeController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11500000000000000000001 /* ServerModeController.swift */; };
+		A11600000000000000000001 /* TemperatureReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11600000000000000000001 /* TemperatureReader.swift */; };
 		A20100000000000000000001 /* LsofFieldParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20100000000000000000001 /* LsofFieldParserTests.swift */; };
 		A20200000000000000000001 /* SystemCommandRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20300000000000000000001 /* SystemCommandRunnerTests.swift */; };
 		A20300000000000000000001 /* LsofPortCollectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20400000000000000000001 /* LsofPortCollectorTests.swift */; };
@@ -36,7 +40,14 @@
 		A20900000000000000000001 /* ServiceStopControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B21000000000000000000001 /* ServiceStopControllerTests.swift */; };
 		A21000000000000000000001 /* TokenUsageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B21100000000000000000001 /* TokenUsageTests.swift */; };
 		A21100000000000000000001 /* ServerModeControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B21200000000000000000001 /* ServerModeControllerTests.swift */; };
+		A21200000000000000000001 /* TemperatureReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B21300000000000000000001 /* TemperatureReaderTests.swift */; };
 		A30100000000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B30100000000000000000001 /* Assets.xcassets */; };
+		A11900000000000000000001 /* TokenModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11900000000000000000001 /* TokenModelCatalog.swift */; };
+		A00600000000000000000001 /* TokenUsageQA.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00600000000000000000001 /* TokenUsageQA.swift */; };
+		A21400000000000000000001 /* TokenAccountingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B21400000000000000000001 /* TokenAccountingTests.swift */; };
+		A21500000000000000000001 /* SessionUsageScannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B21500000000000000000001 /* SessionUsageScannerTests.swift */; };
+		A21600000000000000000001 /* TokenModelChartTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B21600000000000000000001 /* TokenModelChartTests.swift */; };
+		A21700000000000000000001 /* TokenUsageIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B21700000000000000000001 /* TokenUsageIntegrationTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -53,6 +64,7 @@
 		B00100000000000000000001 /* AgentMonitorApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentMonitorApp.swift; sourceTree = "<group>"; };
 		B00200000000000000000001 /* MenuBarContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarContentView.swift; sourceTree = "<group>"; };
 		B00400000000000000000001 /* TokenUsageChartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenUsageChartView.swift; sourceTree = "<group>"; };
+		B00500000000000000000001 /* TemperatureChartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemperatureChartView.swift; sourceTree = "<group>"; };
 		B00300000000000000000001 /* AgentMonitor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AgentMonitor.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B10100000000000000000001 /* ListeningEndpoint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListeningEndpoint.swift; sourceTree = "<group>"; };
 		B10200000000000000000001 /* MonitoredProcess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitoredProcess.swift; sourceTree = "<group>"; };
@@ -62,13 +74,16 @@
 		B10600000000000000000001 /* SystemCommandRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemCommandRunner.swift; sourceTree = "<group>"; };
 		B10700000000000000000001 /* LsofPortCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LsofPortCollector.swift; sourceTree = "<group>"; };
 		B10800000000000000000001 /* DarwinProcessCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DarwinProcessCollector.swift; sourceTree = "<group>"; };
+		B11700000000000000000001 /* HeavyProcessCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeavyProcessCollector.swift; sourceTree = "<group>"; };
 		B10900000000000000000001 /* LaunchAgentCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAgentCollector.swift; sourceTree = "<group>"; };
 		B11000000000000000000001 /* ProjectResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectResolver.swift; sourceTree = "<group>"; };
 		B11100000000000000000001 /* ServiceDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceDiscovery.swift; sourceTree = "<group>"; };
 		B11200000000000000000001 /* MonitorStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorStore.swift; sourceTree = "<group>"; };
 		B11300000000000000000001 /* ServiceStopController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceStopController.swift; sourceTree = "<group>"; };
 		B11400000000000000000001 /* CCTokenUsageReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CCTokenUsageReader.swift; sourceTree = "<group>"; };
+		B11800000000000000000001 /* SessionUsageScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionUsageScanner.swift; sourceTree = "<group>"; };
 		B11500000000000000000001 /* ServerModeController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerModeController.swift; sourceTree = "<group>"; };
+		B11600000000000000000001 /* TemperatureReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemperatureReader.swift; sourceTree = "<group>"; };
 		B20100000000000000000001 /* LsofFieldParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LsofFieldParserTests.swift; sourceTree = "<group>"; };
 		B20200000000000000000001 /* AgentMonitorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AgentMonitorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20300000000000000000001 /* SystemCommandRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemCommandRunnerTests.swift; sourceTree = "<group>"; };
@@ -81,7 +96,14 @@
 		B21000000000000000000001 /* ServiceStopControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceStopControllerTests.swift; sourceTree = "<group>"; };
 		B21100000000000000000001 /* TokenUsageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenUsageTests.swift; sourceTree = "<group>"; };
 		B21200000000000000000001 /* ServerModeControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerModeControllerTests.swift; sourceTree = "<group>"; };
+		B21300000000000000000001 /* TemperatureReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemperatureReaderTests.swift; sourceTree = "<group>"; };
 		B30100000000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B11900000000000000000001 /* TokenModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenModelCatalog.swift; sourceTree = "<group>"; };
+		B00600000000000000000001 /* TokenUsageQA.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenUsageQA.swift; sourceTree = "<group>"; };
+		B21400000000000000000001 /* TokenAccountingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenAccountingTests.swift; sourceTree = "<group>"; };
+		B21500000000000000000001 /* SessionUsageScannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionUsageScannerTests.swift; sourceTree = "<group>"; };
+		B21600000000000000000001 /* TokenModelChartTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenModelChartTests.swift; sourceTree = "<group>"; };
+		B21700000000000000000001 /* TokenUsageIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenUsageIntegrationTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -119,6 +141,8 @@
 				B00100000000000000000001 /* AgentMonitorApp.swift */,
 				B00200000000000000000001 /* MenuBarContentView.swift */,
 				B00400000000000000000001 /* TokenUsageChartView.swift */,
+				B00500000000000000000001 /* TemperatureChartView.swift */,
+				B00600000000000000000001 /* TokenUsageQA.swift */,
 			);
 			path = AgentMonitor/App;
 			sourceTree = "<group>";
@@ -170,6 +194,7 @@
 			isa = PBXGroup;
 			children = (
 				B10800000000000000000001 /* DarwinProcessCollector.swift */,
+				B11700000000000000000001 /* HeavyProcessCollector.swift */,
 				B10900000000000000000001 /* LaunchAgentCollector.swift */,
 			);
 			path = Collectors;
@@ -181,6 +206,7 @@
 				B10600000000000000000001 /* SystemCommandRunner.swift */,
 				B11300000000000000000001 /* ServiceStopController.swift */,
 				B11500000000000000000001 /* ServerModeController.swift */,
+				B11600000000000000000001 /* TemperatureReader.swift */,
 			);
 			path = System;
 			sourceTree = "<group>";
@@ -206,6 +232,8 @@
 			isa = PBXGroup;
 			children = (
 				B11400000000000000000001 /* CCTokenUsageReader.swift */,
+				B11800000000000000000001 /* SessionUsageScanner.swift */,
+				B11900000000000000000001 /* TokenModelCatalog.swift */,
 			);
 			path = Usage;
 			sourceTree = "<group>";
@@ -232,6 +260,11 @@
 				B21000000000000000000001 /* ServiceStopControllerTests.swift */,
 				B21100000000000000000001 /* TokenUsageTests.swift */,
 				B21200000000000000000001 /* ServerModeControllerTests.swift */,
+				B21300000000000000000001 /* TemperatureReaderTests.swift */,
+				B21400000000000000000001 /* TokenAccountingTests.swift */,
+				B21500000000000000000001 /* SessionUsageScannerTests.swift */,
+				B21600000000000000000001 /* TokenModelChartTests.swift */,
+				B21700000000000000000001 /* TokenUsageIntegrationTests.swift */,
 			);
 			path = AgentMonitorTests;
 			sourceTree = "<group>";
@@ -246,6 +279,7 @@
 				D00100000000000000000001 /* Sources */,
 				D00200000000000000000001 /* Frameworks */,
 				D00300000000000000000001 /* Resources */,
+				D00400000000000000000001 /* Install to Applications */,
 			);
 			buildRules = (
 			);
@@ -330,14 +364,41 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		D00400000000000000000001 /* Install to Applications */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(FULL_PRODUCT_NAME)",
+			);
+			name = "Install to Applications";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				/Applications/AgentMonitor.app,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/scripts/install-to-applications.sh\" \"${BUILT_PRODUCTS_DIR}/${FULL_PRODUCT_NAME}\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		D00100000000000000000001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A00600000000000000000001 /* TokenUsageQA.swift in Sources */,
+				A11900000000000000000001 /* TokenModelCatalog.swift in Sources */,
 				A00100000000000000000001 /* AgentMonitorApp.swift in Sources */,
 				A00200000000000000000001 /* MenuBarContentView.swift in Sources */,
 				A00300000000000000000001 /* TokenUsageChartView.swift in Sources */,
+				A00400000000000000000001 /* TemperatureChartView.swift in Sources */,
 				A10100000000000000000001 /* ListeningEndpoint.swift in Sources */,
 				A10200000000000000000001 /* MonitoredProcess.swift in Sources */,
 				A10300000000000000000001 /* MonitoredService.swift in Sources */,
@@ -346,13 +407,16 @@
 				A10600000000000000000001 /* SystemCommandRunner.swift in Sources */,
 				A10700000000000000000001 /* LsofPortCollector.swift in Sources */,
 				A10800000000000000000001 /* DarwinProcessCollector.swift in Sources */,
+				A11700000000000000000001 /* HeavyProcessCollector.swift in Sources */,
 				A10900000000000000000001 /* LaunchAgentCollector.swift in Sources */,
 				A11000000000000000000001 /* ProjectResolver.swift in Sources */,
 				A11100000000000000000001 /* ServiceDiscovery.swift in Sources */,
 				A11200000000000000000001 /* MonitorStore.swift in Sources */,
 				A11300000000000000000001 /* ServiceStopController.swift in Sources */,
 				A11400000000000000000001 /* CCTokenUsageReader.swift in Sources */,
+				A11800000000000000000001 /* SessionUsageScanner.swift in Sources */,
 				A11500000000000000000001 /* ServerModeController.swift in Sources */,
+				A11600000000000000000001 /* TemperatureReader.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -360,6 +424,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A21600000000000000000001 /* TokenModelChartTests.swift in Sources */,
+				A21700000000000000000001 /* TokenUsageIntegrationTests.swift in Sources */,
+				A21500000000000000000001 /* SessionUsageScannerTests.swift in Sources */,
+				A21400000000000000000001 /* TokenAccountingTests.swift in Sources */,
 				A20100000000000000000001 /* LsofFieldParserTests.swift in Sources */,
 				A20200000000000000000001 /* SystemCommandRunnerTests.swift in Sources */,
 				A20300000000000000000001 /* LsofPortCollectorTests.swift in Sources */,
@@ -371,6 +439,7 @@
 				A20900000000000000000001 /* ServiceStopControllerTests.swift in Sources */,
 				A21000000000000000000001 /* TokenUsageTests.swift in Sources */,
 				A21100000000000000000001 /* ServerModeControllerTests.swift in Sources */,
+				A21200000000000000000001 /* TemperatureReaderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

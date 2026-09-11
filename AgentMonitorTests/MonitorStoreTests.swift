@@ -36,6 +36,27 @@ final class MonitorStoreTests: XCTestCase {
         await firstRefresh.value
     }
 
+    func testRefreshKeepsSnapshotWhenOnlyCollectionMetadataChanges() async {
+        let first = MonitorSnapshot(
+            services: [],
+            issues: [],
+            collectedAt: Date(timeIntervalSince1970: 1),
+            collectionDuration: 0.1
+        )
+        let second = MonitorSnapshot(
+            services: [],
+            issues: [],
+            collectedAt: Date(timeIntervalSince1970: 2),
+            collectionDuration: 0.2
+        )
+        let store = MonitorStore(discoverer: SequencedDiscoverer([first, second]))
+
+        await store.refresh()
+        await store.refresh()
+
+        XCTAssertEqual(store.snapshot, first)
+    }
+
     func testMenuContentCanExpandServiceRows() async {
         let service = makeExampleService()
         let snapshot = MonitorSnapshot(
@@ -127,6 +148,49 @@ final class MonitorStoreTests: XCTestCase {
         )
     }
 
+    func testSelectPowerModeUpdatesRequestedModeBeforeSystemChangeFinishes() async {
+        let controller = DelayedFakeServerModeController()
+        let store = MonitorStore(
+            discoverer: StaticDiscoverer(snapshot: .empty),
+            serverModeController: controller
+        )
+
+        store.selectPowerMode(.normal)
+
+        XCTAssertEqual(store.serverModeSnapshot.requestedMode, .normal)
+        XCTAssertEqual(store.serverModeSnapshot.displayedPowerMode, .normal)
+        XCTAssertTrue(store.isChangingServerMode)
+        await controller.waitUntilBlocked()
+
+        await controller.resume()
+        while store.isChangingServerMode {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(store.serverModeSnapshot.requestedMode, .normal)
+        XCTAssertFalse(store.isChangingServerMode)
+    }
+
+    func testRefreshServerModeIsSkippedWhilePowerModeIsChanging() async {
+        let controller = DelayedFakeServerModeController()
+        let store = MonitorStore(
+            discoverer: StaticDiscoverer(snapshot: .empty),
+            serverModeController: controller
+        )
+
+        store.selectPowerMode(.server)
+        await controller.waitUntilBlocked()
+        await store.refreshServerMode()
+        XCTAssertEqual(controller.refreshCount, 0)
+
+        await controller.resume()
+        while store.isChangingServerMode {
+            await Task.yield()
+        }
+        await store.refreshServerMode()
+        XCTAssertEqual(controller.refreshCount, 1)
+    }
+
     func testSortsServicesByMemoryInBothDirections() {
         let low = makeExampleService(id: "low", displayName: "Low", memoryBytes: 8)
         let high = makeExampleService(id: "high", displayName: "High", memoryBytes: 64)
@@ -195,8 +259,68 @@ private actor SuspendedDiscoverer: ServiceDiscovering {
     }
 }
 
+private actor SequencedDiscoverer: ServiceDiscovering {
+    private var snapshots: [MonitorSnapshot]
+
+    init(_ snapshots: [MonitorSnapshot]) {
+        self.snapshots = snapshots
+    }
+
+    func discover() async -> MonitorSnapshot {
+        snapshots.isEmpty ? .empty : snapshots.removeFirst()
+    }
+}
+
 private struct EmptyTokenUsageReader: TokenUsageReading {
     func records(from start: Date, through end: Date) async throws -> [TokenUsageRecord] {
         []
+    }
+}
+
+@MainActor
+private final class DelayedFakeServerModeController: ServerModeControlling {
+    private(set) var refreshCount = 0
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func refresh() async -> ServerModeSnapshot {
+        refreshCount += 1
+        return ServerModeSnapshot.unknown
+    }
+
+    func setEnabled(_ enabled: Bool) async -> ServerModeSnapshot {
+        await setMode(enabled ? .server : .normal)
+    }
+
+    func setMode(_ mode: PowerMode) async -> ServerModeSnapshot {
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+        return ServerModeSnapshot(
+            state: mode == .server ? .enabled : .disabled,
+            requestedMode: mode,
+            effectiveMode: mode == .server ? .server : .normal,
+            isCaffeinateRunning: mode == .server,
+            schedule: .default,
+            message: nil
+        )
+    }
+
+    func setSchedule(_ schedule: PowerModeSchedule, now: Date) async -> ServerModeSnapshot {
+        ServerModeSnapshot.unknown
+    }
+
+    func reconcileSchedule(now: Date) async -> ServerModeSnapshot? {
+        nil
+    }
+
+    func resume() {
+        continuation?.resume()
+        continuation = nil
+    }
+
+    func waitUntilBlocked() async {
+        while continuation == nil {
+            await Task.yield()
+        }
     }
 }

@@ -1,3 +1,4 @@
+import AppKit
 import Charts
 import SwiftUI
 
@@ -6,23 +7,29 @@ struct TokenUsageChartView: View {
     @ObservedObject var store: TokenUsageStore
     @Binding var range: TokenUsageRange
     @State private var hoverState: TokenUsageHoverState?
+    @State private var selectedModelID: String?
+    @Environment(\.colorScheme) private var colorScheme
 
-    private static let highUsageThreshold: Int64 = 100_000_000
+    private static let unit: Int64 = 100_000_000
+    // Keep the established dimensions so the menu remains compact. The
+    // position helper below also clamps correctly when a host is narrower than
+    // this width (for example, a small menu-bar popover).
     private static let tooltipSize = CGSize(width: 164, height: 104)
     private static let tooltipGap: CGFloat = 10
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Label("Token 用量", systemImage: "chart.bar.fill")
                     .font(.subheadline.weight(.semibold))
 
                 Spacer()
 
-                if let snapshot = store.snapshot {
+                if let snapshot = displayedSnapshot {
                     Text(TokenCountFormatter.compact(snapshot.totalTokens))
                         .font(.system(.title3, design: .rounded, weight: .bold))
                         .monospacedDigit()
+                        .accessibilityLabel("当前筛选合计 \(TokenCountFormatter.precise(snapshot.totalTokens)) Tokens")
                 }
 
                 if store.supportsCCSwitchSync {
@@ -33,7 +40,8 @@ struct TokenUsageChartView: View {
                     }
                     .buttonStyle(.borderless)
                     .disabled(store.isSyncing)
-                    .help("从 CC Switch 同步 Token 记录")
+                    .help("用 CC Switch 校准一次，只补本地没有的记录")
+                    .accessibilityLabel("校准 Token 数据")
                 }
             }
 
@@ -44,11 +52,16 @@ struct TokenUsageChartView: View {
             }
             .pickerStyle(.segmented)
 
+            modelSelector(snapshot: store.snapshot)
+
             chartContent
-                .frame(height: 156)
+                .frame(height: 176)
+
+            reviewStatus(snapshot: displayedSnapshot)
+            scanDiagnosticsStatus
 
             HStack {
-                Text("AgentMonitor 本地记录 · 手动同步 CC Switch")
+                Text("独立监测会话日志 · CC Switch 仅用于校准")
                 Spacer()
                 if let collectedAt = store.snapshot?.collectedAt {
                     Text(collectedAt.formatted(date: .omitted, time: .shortened))
@@ -82,15 +95,188 @@ struct TokenUsageChartView: View {
         }
     }
 
+    private var displayedSnapshot: TokenUsageSnapshot? {
+        store.snapshot?.filtered(model: selectedModelID)
+    }
+
+    @ViewBuilder
+    private func reviewStatus(snapshot: TokenUsageSnapshot?) -> some View {
+        if let summary = snapshot?.pendingReviewSummary, summary.count > 0 {
+            Menu {
+                Text("待核对 \(summary.count) 条 · \(TokenCountFormatter.precise(summary.tokens)) Tokens")
+                    .font(.caption)
+                if !summary.reasons.isEmpty {
+                    Divider()
+                    ForEach(Array(summary.reasons.sorted { $0.key < $1.key }), id: \.key) { item in
+                        Text("\(item.key)：\(item.value) 条")
+                    }
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "exclamationmark.circle")
+                    Text("待核对 \(summary.count) 条")
+                    Spacer(minLength: 4)
+                    Text(TokenCountFormatter.compact(summary.tokens))
+                        .monospacedDigit()
+                }
+                .font(.caption2)
+                .foregroundStyle(.orange)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .menuStyle(.borderlessButton)
+            .accessibilityLabel("待核对 \(summary.count) 条 Token，合计 \(TokenCountFormatter.precise(summary.tokens))")
+        }
+    }
+
+    @ViewBuilder
+    private var scanDiagnosticsStatus: some View {
+        if !store.scanDiagnostics.isEmpty {
+            Menu {
+                ForEach(store.scanDiagnostics.prefix(20)) { diagnostic in
+                    Text("\(diagnostic.reason)：\(diagnostic.path)")
+                }
+                if store.scanDiagnostics.count > 20 {
+                    Text("还有 \(store.scanDiagnostics.count - 20) 条")
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "doc.text.magnifyingglass")
+                    Text("扫描提示 \(store.scanDiagnostics.count) 条")
+                    Spacer(minLength: 4)
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .menuStyle(.borderlessButton)
+            .accessibilityLabel("扫描提示 \(store.scanDiagnostics.count) 条，点击查看详情")
+        }
+    }
+
+    @ViewBuilder
+    private func modelSelector(snapshot: TokenUsageSnapshot?) -> some View {
+        let modelIDs = modelIDs(for: snapshot)
+        let legendModelIDs = legendModelIDs(for: snapshot)
+
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Menu {
+                    Button {
+                        selectedModelID = nil
+                    } label: {
+                        Label("总览", systemImage: selectedModelID == nil ? "checkmark" : "chart.bar.xaxis")
+                    }
+
+                    if !modelIDs.isEmpty {
+                        Divider()
+                    }
+
+                    ForEach(modelIDs, id: \.self) { modelID in
+                        let metadata = TokenModelCatalog.metadata(for: modelID)
+                        Button {
+                            selectedModelID = modelID
+                        } label: {
+                            Label(
+                                metadata.name,
+                                systemImage: selectedModelID == modelID ? "checkmark" : "circle"
+                            )
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                        Text(selectedModelName)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(.caption2.weight(.semibold))
+                    }
+                }
+                .menuStyle(.borderlessButton)
+                .accessibilityLabel("模型选择，当前 \(selectedModelName)")
+
+                if selectedModelID != nil {
+                    Button("清除") {
+                        selectedModelID = nil
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption2)
+                    .accessibilityLabel("显示全部模型")
+                }
+
+                Text("每格1亿Token")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+
+                Spacer(minLength: 0)
+            }
+
+            TokenModelLegend(
+                modelIDs: legendModelIDs,
+                selectedModelID: $selectedModelID
+            )
+        }
+    }
+
+    private var selectedModelName: String {
+        guard let selectedModelID else { return "总览" }
+        return TokenModelCatalog.displayName(for: selectedModelID)
+    }
+
+    private func modelIDs(for snapshot: TokenUsageSnapshot?) -> [String] {
+        let observed = snapshot?.modelIDs ?? []
+        var all = Set(TokenModelCatalog.knownModelIDs)
+        all.formUnion(observed.map(TokenModelCatalog.canonicalID))
+        if let selectedModelID {
+            all.insert(TokenModelCatalog.canonicalID(selectedModelID))
+        }
+        return all.sorted(by: modelSort)
+    }
+
+    private func legendModelIDs(for snapshot: TokenUsageSnapshot?) -> [String] {
+        var observed = Set((snapshot?.modelIDs ?? []).map(TokenModelCatalog.canonicalID))
+        if let selectedModelID {
+            observed.insert(TokenModelCatalog.canonicalID(selectedModelID))
+        }
+        return observed.sorted(by: modelSort)
+    }
+
+    private func modelSort(_ lhs: String, _ rhs: String) -> Bool {
+        let left = TokenModelCatalog.metadata(for: lhs)
+        let right = TokenModelCatalog.metadata(for: rhs)
+        if left.family != right.family {
+            return familySortIndex(left.family) < familySortIndex(right.family)
+        }
+        if left.rank != right.rank { return left.rank > right.rank }
+        return left.name.localizedStandardCompare(right.name) == .orderedAscending
+    }
+
+    private func familySortIndex(_ family: TokenModelFamily) -> Int {
+        switch family {
+        case .gpt: 0
+        case .claude: 1
+        case .gemini: 2
+        case .grok: 3
+        case .kimi: 4
+        case .deepSeek: 5
+        case .unknown: 6
+        }
+    }
+
     @ViewBuilder
     private var chartContent: some View {
         if let errorDescription = store.errorDescription {
             chartMessage(errorDescription, systemImage: "externaldrive.badge.exclamationmark")
         } else if let snapshot = store.snapshot {
-            if snapshot.totalTokens == 0 {
-                chartMessage("该时段暂无 Token 记录", systemImage: "chart.bar")
+            let filteredSnapshot = snapshot.filtered(model: selectedModelID)
+            if filteredSnapshot.totalTokens == 0 {
+                let message = selectedModelID == nil
+                    ? "该时段暂无 Token 记录"
+                    : "所选模型在该时段暂无 Token 记录"
+                chartMessage(message, systemImage: selectedModelID == nil ? "chart.bar" : "magnifyingglass")
+                    .accessibilityLabel(message)
             } else {
-                usageChart(snapshot)
+                usageChart(filteredSnapshot)
             }
         } else {
             chartMessage("正在读取本地 Token 记录", systemImage: "chart.bar")
@@ -101,52 +287,81 @@ struct TokenUsageChartView: View {
         let indexedBuckets = snapshot.buckets.enumerated().map { index, bucket in
             IndexedTokenUsageBucket(index: index, bucket: bucket)
         }
-        let points = indexedBuckets.flatMap(TokenUsageChartPoint.points)
-        let highUsageBuckets = snapshot.range == .last30Days
-            ? indexedBuckets.filter { isHighUsageBucket($0.bucket) }
-            : []
+        let modelIDs = chartModelIDs(in: snapshot)
+        let points = indexedBuckets.flatMap {
+            TokenUsageChartPoint.points(for: $0, modelIDs: modelIDs)
+        }
         let futureBuckets = futureBuckets(in: indexedBuckets, snapshot: snapshot)
+        let yUpperBound = Self.chartDisplayYUpperBound(for: snapshot.buckets)
+        let unitBoundaries = TokenUsageChartGeometry.unitBoundaries(upTo: yUpperBound)
 
         return chartView(
             snapshot: snapshot,
             indexedBuckets: indexedBuckets,
             points: points,
-            highUsageBuckets: highUsageBuckets,
-            futureBuckets: futureBuckets
+            modelIDs: modelIDs,
+            futureBuckets: futureBuckets,
+            yUpperBound: yUpperBound,
+            unitBoundaries: unitBoundaries
         )
         .id(snapshot.range)
-        .accessibilityLabel("Token 用量柱状图，合计 \(snapshot.totalTokens) Tokens")
+        .accessibilityLabel(chartAccessibilityLabel(for: snapshot))
+    }
+
+    private func chartModelIDs(in snapshot: TokenUsageSnapshot) -> [String] {
+        var observed = Set(snapshot.modelIDs.map(TokenModelCatalog.canonicalID))
+        if snapshot.buckets.contains(where: { $0.models.isEmpty && $0.totalTokens > 0 }) {
+            observed.insert("unknown")
+        }
+        guard !observed.isEmpty else {
+            // Older locally-created snapshots did not carry model buckets. A
+            // synthetic unknown segment keeps their aggregate visible.
+            return snapshot.totalTokens > 0 ? ["unknown"] : []
+        }
+        return Array(observed).sorted(by: modelSort)
+    }
+
+    private func chartAccessibilityLabel(for snapshot: TokenUsageSnapshot) -> String {
+        let modelText = selectedModelID.map { "，模型 \(TokenModelCatalog.displayName(for: $0))" } ?? "，全部模型"
+        return "Token 用量柱状图\(modelText)，合计 \(TokenCountFormatter.precise(snapshot.totalTokens)) Tokens"
     }
 
     private func chartView(
         snapshot: TokenUsageSnapshot,
         indexedBuckets: [IndexedTokenUsageBucket],
         points: [TokenUsageChartPoint],
-        highUsageBuckets: [IndexedTokenUsageBucket],
-        futureBuckets: [IndexedTokenUsageBucket]
+        modelIDs: [String],
+        futureBuckets: [IndexedTokenUsageBucket],
+        yUpperBound: Double,
+        unitBoundaries: [Double]
     ) -> some View {
         Chart {
+            // Rule marks preserve empty/future buckets on the x axis.
             ForEach(indexedBuckets) { bucket in
                 RuleMark(x: .value("时间", bucket.xValue))
                     .foregroundStyle(.clear)
             }
 
+            // Explicit y ranges keep adjacent model segments contiguous. A
+            // model change only changes the fill; no corner radius or spacing
+            // is applied at that boundary.
             ForEach(points) { point in
                 BarMark(
                     x: .value("时间", point.bucketX),
-                    y: .value("Tokens", Double(point.tokens))
+                    yStart: .value("起点", point.lowerBound),
+                    yEnd: .value("终点", point.upperBound)
                 )
-                .foregroundStyle(by: .value("类型", point.category.title))
-                .cornerRadius(2)
+                .foregroundStyle(by: .value("模型", point.modelID))
+                .cornerRadius(0)
             }
 
-            ForEach(highUsageBuckets) { bucket in
-                PointMark(
-                    x: .value("时间", bucket.xValue),
-                    y: .value("Tokens", Double(bucket.bucket.totalTokens))
-                )
-                .foregroundStyle(.yellow)
-                .symbolSize(42)
+            // Global 1 亿 boundaries are independent of each model's segment,
+            // so a tall bar remains visibly divided at 1 亿, 2 亿, ... even
+            // when a provider/model boundary falls between them.
+            ForEach(unitBoundaries, id: \.self) { boundary in
+                RuleMark(y: .value("每格1亿 Token", boundary))
+                    .foregroundStyle(.secondary.opacity(0.20))
+                    .lineStyle(StrokeStyle(lineWidth: 0.75))
             }
 
             ForEach(futureBuckets) { bucket in
@@ -156,38 +371,87 @@ struct TokenUsageChartView: View {
             }
         }
         .chartForegroundStyleScale(
-            domain: TokenUsageCategory.allCases.map(\.title),
-            range: TokenUsageCategory.allCases.map(\.color)
+            domain: modelIDs,
+            range: modelIDs.map { TokenModelPalette.color(for: $0, scheme: colorScheme) }
         )
-        .chartLegend(position: .bottom, alignment: .leading, spacing: 10)
+        .chartLegend(.hidden)
         .chartXScale(
             domain: chartXDomain(bucketCount: indexedBuckets.count),
-            range: .plotDimension(startPadding: 10, endPadding: 10)
+            range: .plotDimension(startPadding: 14, endPadding: 24)
         )
-        .chartYScale(domain: 0...Self.chartYUpperBound(for: snapshot.buckets))
+        .chartYScale(domain: 0...yUpperBound)
         .chartXAxis {
             AxisMarks(values: axisValues(indexedBuckets, range: snapshot.range)) { value in
                 AxisValueLabel {
                     if let xValue = value.as(Double.self),
                        let bucket = bucket(for: xValue, in: indexedBuckets) {
                         Text(axisLabel(for: bucket.start, range: snapshot.range))
+                            .font(.system(size: 9))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.70)
+                            .fixedSize(horizontal: true, vertical: false)
                     }
                 }
             }
         }
         .chartYAxis {
-            AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
+            AxisMarks(position: .leading, values: [0] + unitBoundaries) { value in
                 AxisGridLine()
                     .foregroundStyle(.secondary.opacity(0.18))
                 AxisValueLabel {
                     if let tokens = value.as(Double.self) {
-                        Text(TokenCountFormatter.compact(Int64(tokens)))
+                        Text(TokenCountFormatter.chineseUnit(Int64(tokens.rounded())))
                     }
                 }
             }
         }
         .chartOverlay { proxy in
-            chartHoverOverlay(proxy: proxy, snapshot: snapshot)
+            ZStack {
+                unitGapOverlay(proxy: proxy, snapshot: snapshot, unitBoundaries: unitBoundaries)
+                chartHoverOverlay(proxy: proxy, snapshot: snapshot)
+            }
+        }
+        .compositingGroup()
+    }
+
+    /// Erases a two-pixel strip only over bars that cross a global 1 亿
+    /// boundary. Model segments share a boundary and therefore receive no
+    /// strip; their only visual distinction is color. The enclosing chart is a
+    /// compositing group so destination-out reveals the chart card behind it.
+    private func unitGapOverlay(
+        proxy: ChartProxy,
+        snapshot: TokenUsageSnapshot,
+        unitBoundaries: [Double]
+    ) -> some View {
+        GeometryReader { geometry in
+            if let plotFrame = proxy.plotFrame {
+                let plotRect = geometry[plotFrame]
+                let bucketCount = snapshot.buckets.count
+                let columnWidth = plotRect.width / CGFloat(max(bucketCount, 1))
+                let barWidth = max(2, columnWidth * 0.62)
+
+                ZStack {
+                    ForEach(unitBoundaries, id: \.self) { boundary in
+                        if let y = proxy.position(forY: boundary) {
+                            ForEach(snapshot.buckets.indices, id: \.self) { index in
+                                if snapshot.buckets[index].totalTokens > Int64(boundary) {
+                                    if let x = proxy.position(forX: Double(index)) {
+                                        Rectangle()
+                                            .fill(Color.black)
+                                            .frame(width: barWidth, height: 2)
+                                            .position(
+                                                x: plotRect.minX + x,
+                                                y: plotRect.minY + y
+                                            )
+                                            .blendMode(.destinationOut)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                .allowsHitTesting(false)
+            }
         }
     }
 
@@ -229,9 +493,9 @@ struct TokenUsageChartView: View {
                     case let .active(location):
                         guard plotRect.contains(location),
                               let bucketIndex = nearestBucketIndex(
-                                to: location.x - plotRect.origin.x,
-                                proxy: proxy,
-                                bucketCount: snapshot.buckets.count
+                                  to: location.x - plotRect.origin.x,
+                                  proxy: proxy,
+                                  bucketCount: snapshot.buckets.count
                               ) else {
                             hoverState = nil
                             return
@@ -244,35 +508,47 @@ struct TokenUsageChartView: View {
                         hoverState = nil
                     }
                 }
+                .onTapGesture { location in
+                    guard plotRect.contains(location),
+                          let index = nearestBucketIndex(
+                            to: location.x - plotRect.minX,
+                            proxy: proxy,
+                            bucketCount: snapshot.buckets.count
+                          ) else {
+                        hoverState = nil
+                        return
+                    }
+                    hoverState = TokenUsageHoverState(bucketIndex: index, location: location)
+                }
             }
         }
     }
 
     private func tokenTooltip(for bucket: TokenUsageBucket, range: TokenUsageRange) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 4) {
                 Text(tooltipTitle(for: bucket.start, range: range))
                     .font(.caption.weight(.semibold))
 
-                Spacer(minLength: 4)
-
-                if isHighUsageBucket(bucket) {
-                    Text("1亿+")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.yellow)
+                if let selectedModelID {
+                    Text("· \(TokenModelCatalog.displayName(for: selectedModelID))")
+                        .font(.caption2)
+                        .lineLimit(1)
                 }
+
+                Spacer(minLength: 2)
             }
 
-            tokenTooltipRow("输入", value: bucket.inputTokens, color: .cyan)
-            tokenTooltipRow("缓存", value: bucket.cacheTokens, color: .indigo)
-            tokenTooltipRow("输出", value: bucket.outputTokens, color: .pink)
+            tokenTooltipRow("输入", value: bucket.inputTokens)
+            tokenTooltipRow("缓存", value: bucket.cacheTokens)
+            tokenTooltipRow("输出", value: bucket.outputTokens)
 
             Divider()
 
             HStack {
                 Text("合计")
                 Spacer()
-                Text(bucket.totalTokens, format: .number.grouping(.automatic))
+                Text(TokenCountFormatter.precise(bucket.totalTokens))
                     .fontWeight(.semibold)
                     .monospacedDigit()
             }
@@ -290,37 +566,43 @@ struct TokenUsageChartView: View {
                 .stroke(.quaternary, lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(tooltipAccessibilityLabel(for: bucket, range: range))
         .allowsHitTesting(false)
     }
 
+    private func tooltipAccessibilityLabel(for bucket: TokenUsageBucket, range: TokenUsageRange) -> String {
+        let model = selectedModelID.map { "，模型 \(TokenModelCatalog.displayName(for: $0))" } ?? ""
+        return "\(tooltipTitle(for: bucket.start, range: range))\(model)：输入 \(TokenCountFormatter.precise(bucket.inputTokens))，缓存 \(TokenCountFormatter.precise(bucket.cacheTokens))，输出 \(TokenCountFormatter.precise(bucket.outputTokens))，合计 \(TokenCountFormatter.precise(bucket.totalTokens)) Tokens"
+    }
+
     static func tooltipPosition(for location: CGPoint, in availableSize: CGSize) -> CGPoint {
-        let tooltipX: CGFloat
-        if location.x + Self.tooltipGap + Self.tooltipSize.width <= availableSize.width {
-            tooltipX = location.x + Self.tooltipGap + Self.tooltipSize.width / 2
+        let width = Self.tooltipSize.width
+        let height = Self.tooltipSize.height
+        let preferredX: CGFloat
+        if location.x + Self.tooltipGap + width <= availableSize.width {
+            preferredX = location.x + Self.tooltipGap + width / 2
         } else {
-            tooltipX = location.x - Self.tooltipGap - Self.tooltipSize.width / 2
+            preferredX = location.x - Self.tooltipGap - width / 2
         }
 
+        let halfWidth = width / 2
+        let minX = min(halfWidth, availableSize.width / 2)
+        let maxX = max(halfWidth, availableSize.width - halfWidth)
+        let halfHeight = height / 2
+        let minY = min(halfHeight, availableSize.height / 2)
+        let maxY = max(halfHeight, availableSize.height - halfHeight)
         return CGPoint(
-            x: min(
-                max(tooltipX, Self.tooltipSize.width / 2),
-                availableSize.width - Self.tooltipSize.width / 2
-            ),
-            y: min(
-                max(location.y, Self.tooltipSize.height / 2),
-                availableSize.height - Self.tooltipSize.height / 2
-            )
+            x: min(max(preferredX, minX), maxX),
+            y: min(max(location.y, minY), maxY)
         )
     }
 
-    private func tokenTooltipRow(_ title: String, value: Int64, color: Color) -> some View {
+    private func tokenTooltipRow(_ title: String, value: Int64) -> some View {
         HStack(spacing: 5) {
-            Circle()
-                .fill(color)
-                .frame(width: 6, height: 6)
             Text(title)
             Spacer()
-            Text(value, format: .number.grouping(.automatic))
+            Text(TokenCountFormatter.precise(value))
                 .monospacedDigit()
         }
         .font(.caption2)
@@ -343,13 +625,18 @@ struct TokenUsageChartView: View {
         }
     }
 
-    private func isHighUsageBucket(_ bucket: TokenUsageBucket) -> Bool {
-        bucket.totalTokens >= Self.highUsageThreshold
-    }
-
+    /// Kept as a compatibility helper for the existing chart tests. The
+    /// rendered chart uses `chartDisplayYUpperBound`, which rounds to global
+    /// 1 亿 cells; this helper retains the previous small-range behavior.
     static func chartYUpperBound(for buckets: [TokenUsageBucket]) -> Double {
         let maximum = buckets.map(\.totalTokens).max() ?? 1
         return max(10_000_000, Double(maximum) * 1.08)
+    }
+
+    static func chartDisplayYUpperBound(for buckets: [TokenUsageBucket]) -> Double {
+        let maximum = max(0, buckets.map(\.totalTokens).max() ?? 0)
+        let units = max(1, Int64(ceil(Double(maximum) / Double(Self.unit))))
+        return Double(units * Self.unit)
     }
 
     private func futureBuckets(
@@ -358,8 +645,8 @@ struct TokenUsageChartView: View {
     ) -> [IndexedTokenUsageBucket] {
         guard snapshot.range == .today,
               let currentHour = Calendar.current.dateInterval(
-                of: .hour,
-                for: snapshot.collectedAt
+                  of: .hour,
+                  for: snapshot.collectedAt
               )?.start else {
             return []
         }
@@ -450,6 +737,174 @@ struct TokenUsageChartView: View {
     }
 }
 
+private struct TokenModelLegend: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let modelIDs: [String]
+    @Binding var selectedModelID: String?
+
+    var body: some View {
+        ScrollView(.vertical, showsIndicators: modelIDs.count > 8) {
+            TokenModelFlowLayout(horizontalSpacing: 8, verticalSpacing: 5) {
+                TokenModelLegendButton(
+                    title: "总览",
+                    color: .secondary,
+                    isSelected: selectedModelID == nil
+                ) {
+                    selectedModelID = nil
+                }
+
+                ForEach(modelIDs, id: \.self) { modelID in
+                    let metadata = TokenModelCatalog.metadata(for: modelID)
+                    TokenModelLegendButton(
+                        title: metadata.name,
+                        color: TokenModelPalette.color(for: modelID, scheme: colorScheme),
+                        isSelected: selectedModelID == modelID
+                    ) {
+                        selectedModelID = modelID
+                    }
+                    .accessibilityLabel("模型 \(metadata.name)，\(metadata.family.title)")
+                }
+            }
+            .padding(.vertical, 1)
+        }
+        .frame(maxHeight: modelIDs.count > 8 ? 54 : nil)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("模型图例")
+    }
+}
+
+private struct TokenModelLegendButton: View {
+    let title: String
+    let color: Color
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(color)
+                    .frame(width: 7, height: 7)
+                Text(title)
+                    .font(.caption2)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(
+                Capsule()
+                    .fill(isSelected ? color.opacity(0.18) : Color.secondary.opacity(0.07))
+            )
+            .overlay {
+                Capsule()
+                    .stroke(isSelected ? color.opacity(0.55) : .clear, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(isSelected ? .primary : .secondary)
+    }
+}
+
+private struct TokenModelFlowLayout: Layout {
+    let horizontalSpacing: CGFloat
+    let verticalSpacing: CGFloat
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        let rows = makeRows(proposal: proposal, subviews: subviews)
+        let width = proposal.width ?? rows.map(\.width).max() ?? 0
+        let height = rows.reduce(0) { partial, row in
+            partial + row.height + (partial == 0 ? 0 : verticalSpacing)
+        }
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        let rows = makeRows(proposal: ProposedViewSize(width: bounds.width, height: bounds.height), subviews: subviews)
+        var y = bounds.minY
+        for row in rows {
+            var x = bounds.minX
+            for index in row.indices {
+                let size = subviews[index].sizeThatFits(.unspecified)
+                subviews[index].place(
+                    at: CGPoint(x: x, y: y + (row.height - size.height) / 2),
+                    anchor: .topLeading,
+                    proposal: ProposedViewSize(size)
+                )
+                x += size.width + horizontalSpacing
+            }
+            y += row.height + verticalSpacing
+        }
+    }
+
+    private struct Row {
+        var indices: [Int] = []
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+    }
+
+    private func makeRows(proposal: ProposedViewSize, subviews: Subviews) -> [Row] {
+        let availableWidth = proposal.width ?? .greatestFiniteMagnitude
+        var rows: [Row] = []
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(.unspecified)
+            guard var row = rows.popLast() else {
+                rows.append(Row(indices: [index], width: size.width, height: size.height))
+                continue
+            }
+            let proposedWidth = row.indices.isEmpty
+                ? size.width
+                : row.width + horizontalSpacing + size.width
+            if proposedWidth <= availableWidth || row.indices.isEmpty {
+                row.indices.append(index)
+                row.width = proposedWidth
+                row.height = max(row.height, size.height)
+                rows.append(row)
+            } else {
+                rows.append(row)
+                rows.append(Row(indices: [index], width: size.width, height: size.height))
+            }
+        }
+        return rows
+    }
+}
+
+private enum TokenModelPalette {
+    static func color(for modelID: String, scheme: ColorScheme) -> Color {
+        let metadata = TokenModelCatalog.metadata(for: modelID)
+        let hue: Double
+        switch metadata.family {
+        case .gpt: hue = 0.61
+        case .claude: hue = 0.08
+        case .gemini: hue = 0.77
+        case .grok: hue = 0.50
+        case .kimi: hue = 0.94
+        case .deepSeek: hue = 0.18
+        case .unknown: hue = 0
+        }
+        // Use SwiftUI's explicit appearance, including preview/QA overrides.
+        // Opaque colors avoid reversing rank depth against dark backgrounds.
+        let depth = min(1, max(0, metadata.normalizedRank))
+        let isDark = scheme == .dark
+        if metadata.family == .unknown {
+            return Color(white: isDark ? 0.70 : 0.48)
+        }
+        return Color(
+            hue: hue,
+            saturation: isDark ? 0.30 + 0.38 * depth : 0.35 + 0.50 * depth,
+            brightness: isDark ? 0.98 - 0.12 * depth : 0.92 - 0.34 * depth
+        )
+    }
+}
+
 private struct TokenUsageHoverState {
     let bucketIndex: Int
     let location: CGPoint
@@ -466,56 +921,99 @@ private struct IndexedTokenUsageBucket: Identifiable {
 private struct TokenUsageChartPoint: Identifiable {
     let bucketStart: Date
     let bucketX: Double
-    let category: TokenUsageCategory
+    let modelID: String
     let tokens: Int64
+    let lowerBound: Double
+    let upperBound: Double
 
-    var id: String { "\(bucketStart.timeIntervalSince1970)-\(category.rawValue)" }
+    var id: String { "\(bucketStart.timeIntervalSince1970)-\(modelID)" }
 
-    static func points(for indexedBucket: IndexedTokenUsageBucket) -> [Self] {
+    static func points(
+        for indexedBucket: IndexedTokenUsageBucket,
+        modelIDs: [String]
+    ) -> [Self] {
         let bucket = indexedBucket.bucket
-        return [
-            Self(
+        var points: [Self] = []
+        var lowerBound: Int64 = 0
+
+        for modelID in modelIDs {
+            let tokens = bucket.models[modelID]?.totalTokens ?? 0
+            guard tokens > 0 else { continue }
+            let upperBound = lowerBound + tokens
+            points.append(Self(
                 bucketStart: bucket.start,
                 bucketX: indexedBucket.xValue,
-                category: .input,
-                tokens: bucket.inputTokens
-            ),
-            Self(
+                modelID: modelID,
+                tokens: tokens,
+                lowerBound: Double(lowerBound),
+                upperBound: Double(upperBound)
+            ))
+            lowerBound = upperBound
+        }
+
+        // Snapshots generated before per-model accounting was introduced still
+        // have useful aggregate totals. Draw those as an explicitly unknown
+        // model instead of dropping the bar.
+        if points.isEmpty, bucket.totalTokens > 0 {
+            points.append(Self(
                 bucketStart: bucket.start,
                 bucketX: indexedBucket.xValue,
-                category: .cache,
-                tokens: bucket.cacheTokens
-            ),
-            Self(
-                bucketStart: bucket.start,
-                bucketX: indexedBucket.xValue,
-                category: .output,
-                tokens: bucket.outputTokens
-            )
-        ]
+                modelID: "unknown",
+                tokens: bucket.totalTokens,
+                lowerBound: 0,
+                upperBound: Double(bucket.totalTokens)
+            ))
+        }
+        return points
     }
 }
 
-private enum TokenUsageCategory: String, CaseIterable {
-    case input
-    case cache
-    case output
+/// Pure geometry used by the chart and its unit tests. The chart's y ranges
+/// use these exact boundaries so a 0.3/1/2.4 亿 fixture cannot be rounded into
+/// equal-height visual cells.
+enum TokenUsageChartGeometry {
+    static let tokenUnit: Int64 = 100_000_000
 
-    var title: String {
-        switch self {
-        case .input: "输入"
-        case .cache: "缓存"
-        case .output: "输出"
-        }
+    static func unitBoundaries(upTo upperBound: Double) -> [Double] {
+        guard upperBound > 0 else { return [] }
+        let count = Int(floor((upperBound + 0.000_001) / Double(tokenUnit)))
+        guard count > 0 else { return [] }
+        return (1...count).map { Double($0) * Double(tokenUnit) }
     }
 
-    var color: Color {
-        switch self {
-        case .input: .cyan
-        case .cache: .indigo
-        case .output: .pink
+    static func unitCellRanges(for totalTokens: Int64) -> [ClosedRange<Double>] {
+        guard totalTokens > 0 else { return [] }
+        var ranges: [ClosedRange<Double>] = []
+        var lower: Int64 = 0
+        while lower < totalTokens {
+            let upper = min(totalTokens, lower + tokenUnit)
+            ranges.append(Double(lower)...Double(upper))
+            lower = upper
+        }
+        return ranges
+    }
+
+    static func modelRanges(
+        _ totals: [(modelID: String, tokens: Int64)]
+    ) -> [TokenUsageModelRange] {
+        var lower: Int64 = 0
+        return totals.compactMap { modelID, tokens in
+            guard tokens > 0 else { return nil }
+            let upper = lower + tokens
+            defer { lower = upper }
+            return TokenUsageModelRange(
+                modelID: modelID,
+                lowerBound: Double(lower),
+                upperBound: Double(upper)
+            )
         }
     }
+}
+
+struct TokenUsageModelRange: Equatable, Sendable {
+    let modelID: String
+    let lowerBound: Double
+    let upperBound: Double
 }
 
 enum TokenCountFormatter {
@@ -528,6 +1026,21 @@ enum TokenCountFormatter {
         default:
             String(value)
         }
+    }
+
+    /// Full precision for tooltips, with grouping but without rounding to 亿/万.
+    static func precise(_ value: Int64) -> String {
+        value.formatted(.number.grouping(.automatic))
+    }
+
+    /// Chinese unit labels for the chart's fixed 1 亿 grid.
+    static func chineseUnit(_ value: Int64) -> String {
+        guard value >= 100_000_000 else { return String(value) }
+        let scaled = Double(value) / 100_000_000
+        if scaled.rounded() == scaled {
+            return "\(Int64(scaled))亿"
+        }
+        return String(format: "%.1f亿", scaled)
     }
 
     private static func format(_ value: Int64, divisor: Double, suffix: String) -> String {
