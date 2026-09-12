@@ -30,6 +30,37 @@ final class TokenUsageIntegrationTests: XCTestCase {
         XCTAssertEqual(rows.filter { $0.accountingStatus == "included" }.count, 3)
     }
 
+    func testUniqueExactCrossSourcePairIsAutomaticallyResolvedAsDuplicate() async throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let url = home.appendingPathComponent("usage.db")
+        let database = TokenUsageDatabase(
+            databaseURL: url,
+            ccSwitchDatabaseURL: home.appendingPathComponent("missing.db"),
+            sessionRoots: .default(home: home)
+        )
+        _ = try await database.records(from: Date(timeIntervalSince1970: 0), through: Date())
+        var pointer: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(url.path, &pointer), SQLITE_OK)
+        let db = try XCTUnwrap(pointer)
+        defer { sqlite3_close(db) }
+        let sql = """
+        INSERT INTO token_usage_records(request_id,app_type,model,input_tokens,output_tokens,cache_read_tokens,created_at,session_id,data_source,source_provenance,synced_from,synced_at) VALUES
+        ('session:source','claude','kimi-k3',100,10,20,2000,'log-session','session_log','session-logs','session-logs',3000),
+        ('proxy-source','claude-desktop','k3',100,10,20,2002,'proxy-session','proxy','cc-switch','cc-switch',3000);
+        """
+        XCTAssertEqual(sqlite3_exec(db, sql, nil, nil, nil), SQLITE_OK)
+
+        _ = try await database.syncFromSessionLogs(now: Date(timeIntervalSince1970: 3000))
+        let rows = try await database.records(
+            from: Date(timeIntervalSince1970: 0),
+            through: Date(timeIntervalSince1970: 3000)
+        )
+        XCTAssertEqual(rows.count, 2)
+        XCTAssertEqual(rows.filter { $0.accountingStatus == "duplicate" }.count, 1)
+        XCTAssertEqual(rows.filter { $0.accountingStatus == "included" }.count, 1)
+    }
+
     @MainActor
     func testFourRealLogFormatsAppendRestartAndPartialLineWithoutCCSwitch() async throws {
         let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

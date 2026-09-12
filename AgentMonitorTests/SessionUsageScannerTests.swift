@@ -177,6 +177,40 @@ final class SessionUsageScannerTests: XCTestCase {
         let included = try XCTUnwrap(second.entries.first { $0.sessionID == threadID })
         XCTAssertEqual(included.accountingStatus, "included")
         XCTAssertNil(included.accountingReason)
+        XCTAssertFalse(second.diagnostics.contains { $0.reason == "thread_id_mismatch" })
+    }
+
+    func testCompoundChildFilenameUsesCopiedParentMetadataAsRelationshipEvidence() throws {
+        let home = try makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let parentID = "019e44e8-450f-7cd2-abea-804ddd037907"
+        let childID = "019e44e8-450f-7cd2-abea-804ddd037908"
+        let parent = home.appendingPathComponent(
+            ".codex/sessions/2026/09/11/rollout-2026-09-11T01-00-00-\(parentID).jsonl"
+        )
+        let child = home.appendingPathComponent(
+            ".codex/sessions/2026/09/11/rollout-2026-09-11T01-05-00-\(parentID)_\(childID).jsonl"
+        )
+        let replay = "{\"type\":\"event_msg\",\"timestamp\":\"2026-09-11T01:00:01Z\",\"payload\":{\"type\":\"token_count\",\"info\":{\"last_token_usage\":{\"input_tokens\":10,\"cached_input_tokens\":0,\"output_tokens\":2},\"total_token_usage\":{\"input_tokens\":10,\"cached_input_tokens\":0,\"output_tokens\":2}}}}\n"
+        let unique = "{\"type\":\"event_msg\",\"timestamp\":\"2026-09-11T01:05:01Z\",\"payload\":{\"type\":\"token_count\",\"info\":{\"last_token_usage\":{\"input_tokens\":20,\"cached_input_tokens\":0,\"output_tokens\":3},\"total_token_usage\":{\"input_tokens\":20,\"cached_input_tokens\":0,\"output_tokens\":3}}}}\n"
+        try write(
+            "{\"type\":\"session_meta\",\"timestamp\":\"2026-09-11T01:00:00Z\",\"payload\":{\"id\":\"\(parentID)\"}}\n" + replay,
+            to: parent
+        )
+        // Current Codex compound child files retain the parent's ID in their
+        // sole session_meta line; the child ID exists only as the suffix.
+        try write(
+            "{\"type\":\"session_meta\",\"timestamp\":\"2026-09-11T01:05:00Z\",\"payload\":{\"id\":\"\(parentID)\"}}\n" + replay + unique,
+            to: child
+        )
+
+        let result = SessionUsageScanner.scan(roots: .default(home: home))
+        let childRows = result.entries.filter { $0.sessionID == childID }
+        XCTAssertEqual(childRows.count, 2)
+        XCTAssertEqual(childRows.filter { $0.accountingStatus == "duplicate" }.count, 1)
+        XCTAssertEqual(childRows.filter { $0.accountingStatus == "included" }.count, 1)
+        XCTAssertFalse(childRows.contains { $0.accountingReason == "missing_session_meta" })
+        XCTAssertFalse(result.diagnostics.contains { $0.path == child.path && $0.reason == "thread_id_mismatch" })
     }
 
     func testLargeFileIsStreamedInsteadOfSilentlySkipped() throws {

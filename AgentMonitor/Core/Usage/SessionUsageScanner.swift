@@ -360,7 +360,10 @@ enum SessionUsageParser {
     }
 
     static func parseCodex(jsonl: String, fileName: String) -> ParsedCodexFile {
-        var parsed = ParsedCodexFile(rootThreadID: threadIDFromFilename(fileName))
+        var parsed = ParsedCodexFile(
+            rootThreadID: threadIDFromFilename(fileName),
+            filenameParentThreadID: compoundParentThreadIDFromFilename(fileName)
+        )
         var currentModel = "unknown"
         var totalHighWater: CodexCumulative?
         var lastSignatureBySource: [String?: CodexTokenSignature] = [:]
@@ -390,6 +393,10 @@ enum SessionUsageParser {
                    ),
                    filenameID != metaID.lowercased() {
                     // A copied ancestor can precede the real root metadata.
+                    parsed.recordFilenameParentMetadata(
+                        metaID: metaID,
+                        timestamp: JSONMap.string(object["timestamp"])
+                    )
                     continue
                 }
                 parsed.rootMetaSeen = true
@@ -479,6 +486,7 @@ enum SessionUsageParser {
         }
 
         parsed.lineOffset = lineOffset
+        parsed.finalizeFilenameParentMetadata()
         return parsed
     }
 
@@ -541,6 +549,22 @@ enum SessionUsageParser {
         return candidate.lowercased()
     }
 
+    /// Some Codex child-task rollouts use `<parent UUID>_<child UUID>` while
+    /// retaining the parent's session metadata as the first line. The suffix
+    /// remains the child's stable identity; the UUID before it is the only
+    /// safe parent relation that can make that copied metadata meaningful.
+    static func compoundParentThreadIDFromFilename(_ fileName: String) -> String? {
+        let stem = URL(fileURLWithPath: fileName).deletingPathExtension().lastPathComponent
+        guard let separator = stem.lastIndex(of: "_") else { return nil }
+        let childText = String(stem[stem.index(after: separator)...])
+        guard let child = UUID(uuidString: childText) else { return nil }
+        let prefix = String(stem[..<separator])
+        guard prefix.count >= 36,
+              let parent = UUID(uuidString: String(prefix.suffix(36))),
+              parent != child else { return nil }
+        return parent.uuidString.lowercased()
+    }
+
     fileprivate static func shouldReplaceClaude(existing: ClaudeUsage?, with parsed: ClaudeUsage) -> Bool {
         guard let existing else { return true }
         if parsed.stopReason != nil && existing.stopReason == nil { return true }
@@ -553,6 +577,8 @@ enum SessionUsageParser {
 
 struct ParsedCodexFile: Equatable {
     var rootThreadID: String?
+    var filenameParentThreadID: String? = nil
+    var filenameParentTimestamp: Int64? = nil
     var rootMetaSeen = false
     var rootTimestamp: Int64?
     var parentThreadID: String?
@@ -560,6 +586,21 @@ struct ParsedCodexFile: Equatable {
     var events: [ParsedCodexEvent] = []
     var lineOffset: Int64 = 0
     var hasBillableTokens = false
+
+    mutating func recordFilenameParentMetadata(metaID: String, timestamp: String?) {
+        guard let filenameParentThreadID,
+              filenameParentThreadID == metaID.lowercased() else { return }
+        filenameParentTimestamp = RFC3339.unixSeconds(timestamp)
+    }
+
+    mutating func finalizeFilenameParentMetadata() {
+        guard !rootMetaSeen,
+              let filenameParentThreadID,
+              let filenameParentTimestamp else { return }
+        rootMetaSeen = true
+        rootTimestamp = filenameParentTimestamp
+        parentThreadID = filenameParentThreadID
+    }
 }
 
 struct ParsedCodexEvent: Equatable {
@@ -932,7 +973,10 @@ private struct CodexUsageAccumulator {
     private let path: String?
 
     init(fileName: String, path: String?) {
-        self.parsed = ParsedCodexFile(rootThreadID: SessionUsageParser.threadIDFromFilename(fileName))
+        self.parsed = ParsedCodexFile(
+            rootThreadID: SessionUsageParser.threadIDFromFilename(fileName),
+            filenameParentThreadID: SessionUsageParser.compoundParentThreadIDFromFilename(fileName)
+        )
         self.path = path
     }
 
@@ -957,7 +1001,13 @@ private struct CodexUsageAccumulator {
                filenameID != metaID.lowercased() {
                 // A copied ancestor can precede the real root metadata. Keep
                 // scanning so the matching root can establish the relation.
-                appendUsageDiagnostic(path: path, reason: "thread_id_mismatch", to: &diagnostics)
+                parsed.recordFilenameParentMetadata(
+                    metaID: metaID,
+                    timestamp: JSONMap.string(object["timestamp"])
+                )
+                if parsed.filenameParentTimestamp == nil {
+                    appendUsageDiagnostic(path: path, reason: "thread_id_mismatch", to: &diagnostics)
+                }
                 return
             }
             parsed.rootMetaSeen = true
@@ -1041,6 +1091,17 @@ private struct CodexUsageAccumulator {
         default:
             return
         }
+    }
+
+    mutating func finish() -> ParsedCodexFile {
+        parsed.finalizeFilenameParentMetadata()
+        if parsed.rootMetaSeen {
+            // A copied ancestor may appear before the real root metadata in a
+            // complete file. Once the root is established, the earlier
+            // mismatch is resolved and must not remain in the diagnostics UI.
+            diagnostics.removeAll { $0.reason == "thread_id_mismatch" }
+        }
+        return parsed
     }
 }
 
@@ -1389,6 +1450,7 @@ enum SessionUsageScanner {
         if stream.invalidUTF8LineCount > 0 {
             diagnostics.append(SessionScanDiagnostic(path: file.url.path, reason: "invalid_utf8"))
         }
+        let parsed = accumulator.finish()
         diagnostics.append(contentsOf: accumulator.diagnostics)
         fileStates.append(
             SessionFileCursor(
@@ -1401,7 +1463,7 @@ enum SessionUsageScanner {
                 tailFingerprint: metadata.tailFingerprint
             )
         )
-        return accumulator.parsed
+        return parsed
     }
 
     private struct CodexMetadata {
@@ -1457,7 +1519,10 @@ enum SessionUsageScanner {
                 ?? object["id"] ?? object["thread_id"] ?? object["threadId"]
            ),
            filenameID != metaID.lowercased() {
-            return nil
+            let parentID = SessionUsageParser.compoundParentThreadIDFromFilename(fileName)
+            return parentID == metaID.lowercased()
+                ? CodexMetadata(parentThreadID: parentID)
+                : nil
         }
         let values = parentThreadIDs(from: object, payload: payload)
         return CodexMetadata(parentThreadID: values.count == 1 ? values[0] : nil)
@@ -1485,7 +1550,7 @@ enum SessionUsageScanner {
             guard streamLines(parentFile.url, fileManager: fileManager, consume: { line, number in
                 accumulator.consume(line, lineNumber: number)
             }) != nil else { continue }
-            let parsed = accumulator.parsed
+            let parsed = accumulator.finish()
             cache[parentFile.url.path] = parsed
             if let timestamp = parsed.rootTimestamp, timestamp <= cutoff { return parsed }
             fallback = fallback ?? parsed

@@ -283,7 +283,7 @@ protocol TokenUsageReading: Sendable {
 }
 
 actor TokenUsageDatabase: TokenUsageReading {
-    private static let currentSchemaVersion: Int32 = 4
+    private static let currentSchemaVersion: Int32 = 5
 
     private let databaseURL: URL
     private let ccSwitchDatabaseURL: URL
@@ -1059,9 +1059,30 @@ actor TokenUsageDatabase: TokenUsageReading {
         if needsMigration {
             try execute("BEGIN IMMEDIATE", in: database)
             do {
-                // Old byte/line cursors cannot prove that an append starts at a
-                // complete JSONL line. Reset them once; raw usage rows remain.
-                try execute("DELETE FROM session_log_sync", in: database)
+                if previousVersion < 4 {
+                    // Old byte/line cursors cannot prove that an append starts
+                    // at a complete JSONL line. Reset them once; raw usage rows
+                    // remain.
+                    try execute("DELETE FROM session_log_sync", in: database)
+                } else if previousVersion < 5 {
+                    // Schema 4 treated Codex's compound parent_child rollout
+                    // filenames as missing metadata. Reparse only those known
+                    // affected files so the one-time repair stays bounded.
+                    try execute("""
+                        DELETE FROM session_log_sync
+                        WHERE file_path IN (
+                            SELECT DISTINCT source_path
+                            FROM token_usage_records
+                            WHERE accounting_status = 'pending'
+                              AND accounting_reason = 'missing_session_meta'
+                              AND source_path IS NOT NULL
+                            UNION
+                            SELECT file_path
+                            FROM session_scan_diagnostics
+                            WHERE reason = 'thread_id_mismatch'
+                        )
+                        """, in: database)
+                }
                 try reconcileAccounting(in: database)
                 try setSchemaVersion(Self.currentSchemaVersion, in: database)
                 try execute("COMMIT", in: database)
@@ -1478,16 +1499,36 @@ actor TokenUsageDatabase: TokenUsageReading {
         for session in sessionRows {
             sessionsByUsage[session.usageKey, default: []].append(session)
         }
-        for row in rows where row.syncedFrom == "cc-switch"
-            && row.dataSource == "proxy"
-            && (row.accountingStatus == TokenUsageRecord.includedAccountingStatus
-                || row.accountingStatus == TokenUsageRecord.pendingAccountingStatus) {
-            let candidates = sessionsByUsage[row.usageKey] ?? []
+        let proxyRows = rows.filter {
+            $0.syncedFrom == "cc-switch"
+                && $0.dataSource == "proxy"
+                && ($0.accountingStatus == TokenUsageRecord.includedAccountingStatus
+                    || $0.accountingStatus == TokenUsageRecord.pendingAccountingStatus)
+        }
+        var suspectedByProxy: [String: [AccountingRow]] = [:]
+        var proxyCountBySessionRequestID: [String: Int] = [:]
+        for proxy in proxyRows {
+            let candidates = (sessionsByUsage[proxy.usageKey] ?? []).filter {
+                suspectedCrossSourceMatch(proxy, $0)
+            }
+            suspectedByProxy[proxy.requestID] = candidates
+            for candidate in candidates {
+                proxyCountBySessionRequestID[candidate.requestID, default: 0] += 1
+            }
+        }
+        for row in proxyRows {
+            let candidates = suspectedByProxy[row.requestID] ?? []
             if candidates.contains(where: { exactCrossSourceMatch(row, $0) }) {
-                // A direct request-id mapping is required for duplicate status;
-                // same counters alone remain a review candidate.
                 changes.append((row.requestID, TokenUsageRecord.duplicateAccountingStatus, "session_log_authoritative"))
-            } else if candidates.contains(where: { suspectedCrossSourceMatch(row, $0) }) {
+            } else if candidates.count == 1,
+                      let candidate = candidates.first,
+                      proxyCountBySessionRequestID[candidate.requestID] == 1 {
+                // Older CC Switch rows cannot expose a direct request-ID map.
+                // Exact normalized counters, canonical model, a <=5 second
+                // timestamp gap, and a globally one-to-one pairing together
+                // provide deterministic cross-source duplicate evidence.
+                changes.append((row.requestID, TokenUsageRecord.duplicateAccountingStatus, "unique_cross_source_exact_pair"))
+            } else if !candidates.isEmpty {
                 changes.append((row.requestID, TokenUsageRecord.pendingAccountingStatus, "suspected_proxy_overlap"))
             } else if row.accountingStatus == TokenUsageRecord.pendingAccountingStatus,
                       row.accountingReason == "suspected_proxy_overlap" {
