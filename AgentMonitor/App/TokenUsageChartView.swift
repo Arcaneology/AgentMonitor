@@ -743,31 +743,28 @@ private struct TokenModelLegend: View {
     @Binding var selectedModelID: String?
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: modelIDs.count > 8) {
-            TokenModelFlowLayout(horizontalSpacing: 8, verticalSpacing: 5) {
-                TokenModelLegendButton(
-                    title: "总览",
-                    color: .secondary,
-                    isSelected: selectedModelID == nil
-                ) {
-                    selectedModelID = nil
-                }
-
-                ForEach(modelIDs, id: \.self) { modelID in
-                    let metadata = TokenModelCatalog.metadata(for: modelID)
-                    TokenModelLegendButton(
-                        title: metadata.name,
-                        color: TokenModelPalette.color(for: modelID, scheme: colorScheme),
-                        isSelected: selectedModelID == modelID
-                    ) {
-                        selectedModelID = modelID
-                    }
-                    .accessibilityLabel("模型 \(metadata.name)，\(metadata.family.title)")
-                }
+        TokenModelFlowLayout(horizontalSpacing: 8, verticalSpacing: 5) {
+            TokenModelLegendButton(
+                title: "总览",
+                color: .secondary,
+                isSelected: selectedModelID == nil
+            ) {
+                selectedModelID = nil
             }
-            .padding(.vertical, 1)
+
+            ForEach(modelIDs, id: \.self) { modelID in
+                let metadata = TokenModelCatalog.metadata(for: modelID)
+                TokenModelLegendButton(
+                    title: metadata.name,
+                    color: TokenModelPalette.color(for: modelID, scheme: colorScheme),
+                    isSelected: selectedModelID == modelID
+                ) {
+                    selectedModelID = modelID
+                }
+                .accessibilityLabel("模型 \(metadata.name)，\(metadata.family.title)")
+            }
         }
-        .frame(maxHeight: modelIDs.count > 8 ? 54 : nil)
+        .padding(.vertical, 1)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("模型图例")
     }
