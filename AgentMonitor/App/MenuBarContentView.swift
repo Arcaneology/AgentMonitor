@@ -10,14 +10,21 @@ struct MenuBarContentView: View {
     @State private var sortOrder: ServiceSortOrder = .nameAscending
     @State private var tokenUsageRange: TokenUsageRange = .today
     @State private var isServiceMonitorExpanded: Bool
+    private let temperatureStore: TemperatureStore?
+    private let processStore: HeavyProcessStore?
+    @State private var showsProcessUsage = false
 
     init(
         store: MonitorStore,
         serviceToStop: MonitoredService? = nil,
         tokenUsageStore: TokenUsageStore = TokenUsageStore(),
-        isServiceMonitorExpanded: Bool = false
+        isServiceMonitorExpanded: Bool = false,
+        temperatureStore: TemperatureStore? = nil,
+        processStore: HeavyProcessStore? = nil
     ) {
         self.store = store
+        self.temperatureStore = temperatureStore
+        self.processStore = processStore
         _serviceToStop = State(initialValue: serviceToStop)
         _tokenUsageStore = StateObject(wrappedValue: tokenUsageStore)
         _isServiceMonitorExpanded = State(initialValue: isServiceMonitorExpanded)
@@ -48,7 +55,7 @@ struct MenuBarContentView: View {
     private var header: some View {
         VStack(spacing: 12) {
             HStack {
-                Label("Agent Monitor", systemImage: "network")
+                Label("Agent Monitor", systemImage: "antenna.radiowaves.left.and.right")
                     .font(.headline)
 
                 Spacer()
@@ -133,8 +140,11 @@ struct MenuBarContentView: View {
     private var content: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 14) {
-                TokenUsageChartView(store: tokenUsageStore, range: $tokenUsageRange)
                 powerModeSection
+                TokenUsageChartView(store: tokenUsageStore, range: $tokenUsageRange)
+                if let temperatureStore {
+                    TemperatureMonitorSection(temperatureStore: temperatureStore)
+                }
                 serviceMonitorSection
             }
             .padding(12)
@@ -194,8 +204,20 @@ struct MenuBarContentView: View {
             .buttonStyle(.plain)
 
             if isServiceMonitorExpanded {
-                serviceMonitorDetails
-                    .padding(.top, 10)
+                Picker("监测内容", selection: $showsProcessUsage) {
+                    Text("端口 / 服务").tag(false)
+                    Text("进程占用").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .padding(.top, 10)
+
+                if showsProcessUsage, let processStore {
+                    HeavyProcessMonitorView(processStore: processStore)
+                        .padding(.top, 10)
+                } else {
+                    serviceMonitorDetails
+                        .padding(.top, 10)
+                }
             }
         }
         .padding(10)

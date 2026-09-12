@@ -3,6 +3,16 @@ import XCTest
 @testable import AgentMonitor
 
 final class TokenModelChartTests: XCTestCase {
+    func testFilterSelectionTogglesBackToOverviewAndKeepsModesExclusive() {
+        XCTAssertEqual(TokenUsageFilter.toggling(.gpt, current: nil), .family(.gpt))
+        XCTAssertNil(TokenUsageFilter.toggling(.gpt, current: .family(.gpt)))
+        XCTAssertEqual(
+            TokenUsageFilter.toggling(modelID: "openai/gpt-6-astra", current: .family(.gpt)),
+            .model("gpt-6-astra")
+        )
+        XCTAssertNil(TokenUsageFilter.toggling(modelID: "gpt-6-astra", current: .model("gpt-6-astra")))
+    }
+
     func testObservedProviderNamesHavePresetFamilies() {
         XCTAssertEqual(TokenModelCatalog.canonicalID("google-antigravity/gemini-3.8-flash-high"), "gemini-3.8-flash")
         XCTAssertEqual(TokenModelCatalog.family(for: "google-antigravity/gemini-future"), .gemini)
@@ -140,6 +150,41 @@ final class TokenModelChartTests: XCTestCase {
         XCTAssertEqual(snapshot.filtered(model: "claude-opus-5").totalTokens, 40)
         XCTAssertEqual(snapshot.filtered(model: "gpt-5.6-luna").totalTokens, 0)
         XCTAssertEqual(snapshot.filtered(model: "gpt-6-astra").modelIDs, ["gpt-6-astra"])
+    }
+
+    func testFamilyFilterAggregatesModelsAndPendingReviewWithinFamily() {
+        let start = Date(timeIntervalSince1970: 0)
+        let bucket = TokenUsageBucket(
+            start: start,
+            inputTokens: 150,
+            cacheTokens: 20,
+            outputTokens: 15,
+            models: [
+                "gpt-6-astra": TokenUsageModelTotals(inputTokens: 80, cacheTokens: 10, outputTokens: 10),
+                "gpt-5.6-sol": TokenUsageModelTotals(inputTokens: 40, cacheTokens: 5, outputTokens: 5),
+                "claude-opus-5": TokenUsageModelTotals(inputTokens: 30, cacheTokens: 5, outputTokens: 0)
+            ],
+            pendingModels: [
+                "gpt-6-astra": TokenUsageModelTotals(inputTokens: 7, cacheTokens: 2, outputTokens: 1),
+                "claude-opus-5": TokenUsageModelTotals(inputTokens: 20, cacheTokens: 0, outputTokens: 0)
+            ],
+            pendingCount: 3,
+            pendingReasons: ["review": 3],
+            pendingCountsByModel: ["gpt-6-astra": 1, "claude-opus-5": 2],
+            pendingReasonsByModel: [
+                "gpt-6-astra": ["review": 1],
+                "claude-opus-5": ["review": 2]
+            ]
+        )
+        let snapshot = TokenUsageSnapshot(range: .today, buckets: [bucket], collectedAt: start)
+        let filtered = snapshot.filtered(family: .gpt)
+
+        XCTAssertEqual(filtered.totalTokens, 150)
+        XCTAssertEqual(Set(filtered.modelIDs), ["gpt-6-astra", "gpt-5.6-sol"])
+        XCTAssertEqual(
+            filtered.pendingReviewSummary,
+            TokenUsageReviewSummary(count: 1, tokens: 10, reasons: ["review": 1])
+        )
     }
 
     @MainActor

@@ -16,7 +16,7 @@ enum TokenModelFamily: String, CaseIterable, Codable, Sendable {
 
     var title: String {
         switch self {
-        case .gpt: "GPT"
+        case .gpt: "ChatGPT"
         case .claude: "Claude"
         case .gemini: "Gemini"
         case .grok: "Grok"
@@ -24,6 +24,20 @@ enum TokenModelFamily: String, CaseIterable, Codable, Sendable {
         case .deepSeek: "DeepSeek"
         case .unknown: "未知"
         }
+    }
+}
+
+enum TokenUsageFilter: Equatable, Sendable {
+    case family(TokenModelFamily)
+    case model(String)
+
+    static func toggling(_ family: TokenModelFamily, current: Self?) -> Self? {
+        current == .family(family) ? nil : .family(family)
+    }
+
+    static func toggling(modelID: String, current: Self?) -> Self? {
+        let selection = Self.model(TokenModelCatalog.canonicalID(modelID))
+        return current == selection ? nil : selection
     }
 }
 

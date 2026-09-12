@@ -188,17 +188,31 @@ struct TokenUsageBucket: Identifiable, Sendable, Equatable {
     func filtered(model: String?) -> TokenUsageBucket {
         guard let model else { return self }
         let modelID = TokenModelCatalog.canonicalID(model)
+        return filtered(modelIDs: [modelID])
+    }
+
+    func filtered(family: TokenModelFamily?) -> TokenUsageBucket {
+        guard let family else { return self }
+        let modelIDs = Set(models.keys.lazy.filter { TokenModelCatalog.family(for: $0) == family })
+            .union(pendingModels.keys.lazy.filter { TokenModelCatalog.family(for: $0) == family })
+        return filtered(modelIDs: modelIDs)
+    }
+
+    private func filtered(modelIDs: Set<String>) -> TokenUsageBucket {
         var copy = self
-        let included = models[modelID] ?? TokenUsageModelTotals()
-        copy.inputTokens = included.inputTokens
-        copy.cacheTokens = included.cacheTokens
-        copy.outputTokens = included.outputTokens
-        copy.models = models[modelID].map { [modelID: $0] } ?? [:]
-        copy.pendingModels = pendingModels[modelID].map { [modelID: $0] } ?? [:]
-        copy.pendingCount = pendingCountsByModel[modelID] ?? 0
-        copy.pendingReasons = pendingReasonsByModel[modelID] ?? [:]
-        copy.pendingCountsByModel = pendingCountsByModel[modelID].map { [modelID: $0] } ?? [:]
-        copy.pendingReasonsByModel = pendingReasonsByModel[modelID].map { [modelID: $0] } ?? [:]
+        copy.models = models.filter { modelIDs.contains($0.key) }
+        copy.pendingModels = pendingModels.filter { modelIDs.contains($0.key) }
+        copy.inputTokens = copy.models.values.reduce(0) { $0 + $1.inputTokens }
+        copy.cacheTokens = copy.models.values.reduce(0) { $0 + $1.cacheTokens }
+        copy.outputTokens = copy.models.values.reduce(0) { $0 + $1.outputTokens }
+        copy.pendingCountsByModel = pendingCountsByModel.filter { modelIDs.contains($0.key) }
+        copy.pendingReasonsByModel = pendingReasonsByModel.filter { modelIDs.contains($0.key) }
+        copy.pendingCount = copy.pendingCountsByModel.values.reduce(0, +)
+        copy.pendingReasons = copy.pendingReasonsByModel.values.reduce(into: [:]) { result, reasons in
+            for (reason, count) in reasons {
+                result[reason, default: 0] += count
+            }
+        }
         return copy
     }
 }
@@ -235,6 +249,15 @@ struct TokenUsageSnapshot: Sendable, Equatable {
         return TokenUsageSnapshot(
             range: range,
             buckets: buckets.map { $0.filtered(model: model) },
+            collectedAt: collectedAt
+        )
+    }
+
+    func filtered(family: TokenModelFamily?) -> TokenUsageSnapshot {
+        guard family != nil else { return self }
+        return TokenUsageSnapshot(
+            range: range,
+            buckets: buckets.map { $0.filtered(family: family) },
             collectedAt: collectedAt
         )
     }

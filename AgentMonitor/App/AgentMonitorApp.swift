@@ -35,41 +35,21 @@ struct AgentMonitorApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuBarContentView(store: store, tokenUsageStore: tokenUsageStore)
-        } label: {
-            Label("\(store.portCount) · \(powerModeMenuText)", systemImage: powerModeMenuIcon)
-                .accessibilityLabel("Agent Monitor，\(store.portCount) 个端口，\(powerModeMenuText)")
-        }
-        .menuBarExtraStyle(.window)
-
-        MenuBarExtra {
-            TemperatureMenuView(
+            MenuBarContentView(
+                store: store,
+                tokenUsageStore: tokenUsageStore,
                 temperatureStore: temperatureStore,
                 processStore: heavyProcessStore
             )
         } label: {
-            TemperatureMenuBarLabel(store: temperatureStore)
+            HStack(spacing: 5) {
+                Image(systemName: "antenna.radiowaves.left.and.right")
+                TemperatureMenuBarLabel(store: temperatureStore)
+            }
         }
         .menuBarExtraStyle(.window)
     }
 
-    private var powerModeMenuText: String {
-        switch store.serverModeSnapshot.effectiveMode {
-        case .server: "Server"
-        case .sleep: "Sleep"
-        case .normal: "Normal"
-        case .unknown: "未知"
-        }
-    }
-
-    private var powerModeMenuIcon: String {
-        switch store.serverModeSnapshot.effectiveMode {
-        case .server: "server.rack"
-        case .sleep: "moon.zzz"
-        case .normal: "network"
-        case .unknown: "questionmark.circle"
-        }
-    }
 }
 
 #if AGENT_MONITOR_QA

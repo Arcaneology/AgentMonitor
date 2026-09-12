@@ -7,7 +7,7 @@ struct TokenUsageChartView: View {
     @ObservedObject var store: TokenUsageStore
     @Binding var range: TokenUsageRange
     @State private var hoverState: TokenUsageHoverState?
-    @State private var selectedModelID: String?
+    @State private var filter: TokenUsageFilter?
     @Environment(\.colorScheme) private var colorScheme
 
     private static let unit: Int64 = 100_000_000
@@ -59,16 +59,6 @@ struct TokenUsageChartView: View {
 
             reviewStatus(snapshot: displayedSnapshot)
             scanDiagnosticsStatus
-
-            HStack {
-                Text("独立监测会话日志 · CC Switch 仅用于校准")
-                Spacer()
-                if let collectedAt = store.snapshot?.collectedAt {
-                    Text(collectedAt.formatted(date: .omitted, time: .shortened))
-                }
-            }
-            .font(.caption2)
-            .foregroundStyle(.tertiary)
         }
         .padding(12)
         .background(
@@ -96,7 +86,22 @@ struct TokenUsageChartView: View {
     }
 
     private var displayedSnapshot: TokenUsageSnapshot? {
-        store.snapshot?.filtered(model: selectedModelID)
+        guard let snapshot = store.snapshot else { return nil }
+        switch filter {
+        case let .family(family): return snapshot.filtered(family: family)
+        case let .model(modelID): return snapshot.filtered(model: modelID)
+        case nil: return snapshot
+        }
+    }
+
+    private var selectedFamily: TokenModelFamily? {
+        guard case let .family(family) = filter else { return nil }
+        return family
+    }
+
+    private var selectedModelID: String? {
+        guard case let .model(modelID) = filter else { return nil }
+        return modelID
     }
 
     @ViewBuilder
@@ -157,70 +162,49 @@ struct TokenUsageChartView: View {
     private func modelSelector(snapshot: TokenUsageSnapshot?) -> some View {
         let modelIDs = modelIDs(for: snapshot)
         let legendModelIDs = legendModelIDs(for: snapshot)
+        let families = modelFamilies(for: modelIDs)
 
         VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Menu {
-                    Button {
-                        selectedModelID = nil
-                    } label: {
-                        Label("总览", systemImage: selectedModelID == nil ? "checkmark" : "chart.bar.xaxis")
-                    }
-
-                    if !modelIDs.isEmpty {
-                        Divider()
-                    }
-
-                    ForEach(modelIDs, id: \.self) { modelID in
-                        let metadata = TokenModelCatalog.metadata(for: modelID)
+                    ForEach(families, id: \.self) { family in
                         Button {
-                            selectedModelID = modelID
+                            filter = TokenUsageFilter.toggling(family, current: filter)
                         } label: {
                             Label(
-                                metadata.name,
-                                systemImage: selectedModelID == modelID ? "checkmark" : "circle"
+                                family.title,
+                                systemImage: selectedFamily == family ? "checkmark" : "circle"
                             )
                         }
                     }
                 } label: {
                     HStack(spacing: 5) {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
-                        Text(selectedModelName)
+                        Image(systemName: "square.stack.3d.up")
+                        Text(selectedFamily?.title ?? "模型系列")
                             .lineLimit(1)
                         Image(systemName: "chevron.down")
                             .font(.caption2.weight(.semibold))
                     }
                 }
                 .menuStyle(.borderlessButton)
-                .accessibilityLabel("模型选择，当前 \(selectedModelName)")
-
-                if selectedModelID != nil {
-                    Button("清除") {
-                        selectedModelID = nil
-                    }
-                    .buttonStyle(.borderless)
-                    .font(.caption2)
-                    .accessibilityLabel("显示全部模型")
-                }
-
-                Text("每格1亿Token")
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
+                .accessibilityLabel(selectedFamily.map { "模型系列，当前 \($0.title)" } ?? "模型系列，当前未筛选")
 
                 Spacer(minLength: 0)
             }
 
             TokenModelLegend(
                 modelIDs: legendModelIDs,
-                selectedModelID: $selectedModelID
-            )
+                selectedModelID: selectedModelID
+            ) { modelID in
+                filter = TokenUsageFilter.toggling(modelID: modelID, current: filter)
+            }
         }
     }
 
-    private var selectedModelName: String {
-        guard let selectedModelID else { return "总览" }
-        return TokenModelCatalog.displayName(for: selectedModelID)
+    private func modelFamilies(for modelIDs: [String]) -> [TokenModelFamily] {
+        var families = Set(modelIDs.map(TokenModelCatalog.family))
+        families.remove(.unknown)
+        return families.sorted { familySortIndex($0) < familySortIndex($1) }
     }
 
     private func modelIDs(for snapshot: TokenUsageSnapshot?) -> [String] {
@@ -267,16 +251,13 @@ struct TokenUsageChartView: View {
     private var chartContent: some View {
         if let errorDescription = store.errorDescription {
             chartMessage(errorDescription, systemImage: "externaldrive.badge.exclamationmark")
-        } else if let snapshot = store.snapshot {
-            let filteredSnapshot = snapshot.filtered(model: selectedModelID)
-            if filteredSnapshot.totalTokens == 0 {
-                let message = selectedModelID == nil
-                    ? "该时段暂无 Token 记录"
-                    : "所选模型在该时段暂无 Token 记录"
-                chartMessage(message, systemImage: selectedModelID == nil ? "chart.bar" : "magnifyingglass")
+        } else if let snapshot = displayedSnapshot {
+            if snapshot.totalTokens == 0 {
+                let message = filter == nil ? "该时段暂无 Token 记录" : "所选范围在该时段暂无 Token 记录"
+                chartMessage(message, systemImage: filter == nil ? "chart.bar" : "magnifyingglass")
                     .accessibilityLabel(message)
             } else {
-                usageChart(filteredSnapshot)
+                usageChart(snapshot)
             }
         } else {
             chartMessage("正在读取本地 Token 记录", systemImage: "chart.bar")
@@ -322,7 +303,9 @@ struct TokenUsageChartView: View {
     }
 
     private func chartAccessibilityLabel(for snapshot: TokenUsageSnapshot) -> String {
-        let modelText = selectedModelID.map { "，模型 \(TokenModelCatalog.displayName(for: $0))" } ?? "，全部模型"
+        let modelText = selectedModelID.map { "，模型 \(TokenModelCatalog.displayName(for: $0))" }
+            ?? selectedFamily.map { "，模型系列 \($0.title)" }
+            ?? "，全部模型"
         return "Token 用量柱状图\(modelText)，合计 \(TokenCountFormatter.precise(snapshot.totalTokens)) Tokens"
     }
 
@@ -572,8 +555,13 @@ struct TokenUsageChartView: View {
     }
 
     private func tooltipAccessibilityLabel(for bucket: TokenUsageBucket, range: TokenUsageRange) -> String {
-        let model = selectedModelID.map { "，模型 \(TokenModelCatalog.displayName(for: $0))" } ?? ""
-        return "\(tooltipTitle(for: bucket.start, range: range))\(model)：输入 \(TokenCountFormatter.precise(bucket.inputTokens))，缓存 \(TokenCountFormatter.precise(bucket.cacheTokens))，输出 \(TokenCountFormatter.precise(bucket.outputTokens))，合计 \(TokenCountFormatter.precise(bucket.totalTokens)) Tokens"
+        let selection: String
+        switch filter {
+        case let .family(family): selection = "，模型系列 \(family.title)"
+        case let .model(modelID): selection = "，模型 \(TokenModelCatalog.displayName(for: modelID))"
+        case nil: selection = ""
+        }
+        return "\(tooltipTitle(for: bucket.start, range: range))\(selection)：输入 \(TokenCountFormatter.precise(bucket.inputTokens))，缓存 \(TokenCountFormatter.precise(bucket.cacheTokens))，输出 \(TokenCountFormatter.precise(bucket.outputTokens))，合计 \(TokenCountFormatter.precise(bucket.totalTokens)) Tokens"
     }
 
     static func tooltipPosition(for location: CGPoint, in availableSize: CGSize) -> CGPoint {
@@ -740,18 +728,11 @@ struct TokenUsageChartView: View {
 private struct TokenModelLegend: View {
     @Environment(\.colorScheme) private var colorScheme
     let modelIDs: [String]
-    @Binding var selectedModelID: String?
+    let selectedModelID: String?
+    let onSelect: (String) -> Void
 
     var body: some View {
         TokenModelFlowLayout(horizontalSpacing: 8, verticalSpacing: 5) {
-            TokenModelLegendButton(
-                title: "总览",
-                color: .secondary,
-                isSelected: selectedModelID == nil
-            ) {
-                selectedModelID = nil
-            }
-
             ForEach(modelIDs, id: \.self) { modelID in
                 let metadata = TokenModelCatalog.metadata(for: modelID)
                 TokenModelLegendButton(
@@ -759,7 +740,7 @@ private struct TokenModelLegend: View {
                     color: TokenModelPalette.color(for: modelID, scheme: colorScheme),
                     isSelected: selectedModelID == modelID
                 ) {
-                    selectedModelID = modelID
+                    onSelect(modelID)
                 }
                 .accessibilityLabel("模型 \(metadata.name)，\(metadata.family.title)")
             }

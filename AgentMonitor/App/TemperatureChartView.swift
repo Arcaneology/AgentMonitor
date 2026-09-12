@@ -2,25 +2,14 @@ import Charts
 import SwiftUI
 
 @MainActor
-struct TemperatureMenuView: View {
-    @ObservedObject var temperatureStore: TemperatureStore
+struct HeavyProcessMonitorView: View {
     @ObservedObject var processStore: HeavyProcessStore
     @State private var processToClose: HeavyProcess?
     @State private var actionPrompt: ProcessActionPrompt?
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-            Divider()
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    TemperatureChartView(store: temperatureStore)
-                    heavyProcessSection
-                }
-                .padding(12)
-            }
-            .frame(height: 420)
+            heavyProcessSection
 
             if let processToClose {
                 Divider()
@@ -30,14 +19,25 @@ struct TemperatureMenuView: View {
                 actionPanel(for: actionPrompt)
             }
         }
-        .frame(width: 360)
-        .background(.regularMaterial)
+    }
+
+}
+
+@MainActor
+struct TemperatureMonitorSection: View {
+    @ObservedObject var temperatureStore: TemperatureStore
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            TemperatureChartView(store: temperatureStore)
+        }
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("温度", systemImage: "thermometer.medium")
+                Label("温度监测", systemImage: "thermometer.medium")
                     .font(.headline)
 
                 Spacer()
@@ -72,7 +72,10 @@ struct TemperatureMenuView: View {
         .padding(14)
     }
 
-    private var heavyProcessSection: some View {
+}
+
+private extension HeavyProcessMonitorView {
+    var heavyProcessSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("占用较高")
                 .font(.subheadline.weight(.semibold))
