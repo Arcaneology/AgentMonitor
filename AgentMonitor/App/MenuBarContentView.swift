@@ -1,6 +1,22 @@
 import AppKit
 import SwiftUI
 
+extension View {
+    func monitorCard() -> some View {
+        self
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                Color(nsColor: .controlBackgroundColor).opacity(0.65),
+                in: RoundedRectangle(cornerRadius: 12)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(.quaternary, lineWidth: 1)
+            }
+    }
+}
+
 @MainActor
 struct MenuBarContentView: View {
     @ObservedObject var store: MonitorStore
@@ -12,7 +28,13 @@ struct MenuBarContentView: View {
     @State private var isServiceMonitorExpanded: Bool
     private let temperatureStore: TemperatureStore?
     private let processStore: HeavyProcessStore?
-    @State private var showsProcessUsage = false
+    @State private var monitorTab: MonitorTab = .ports
+
+    private enum MonitorTab: String, CaseIterable {
+        case ports = "端口"
+        case services = "服务"
+        case processes = "进程"
+    }
 
     init(
         store: MonitorStore,
@@ -71,33 +93,30 @@ struct MenuBarContentView: View {
                 Label("电源模式", systemImage: "powerplug")
                     .font(.subheadline.weight(.semibold))
 
-                Text(powerModeStatusText)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(powerModeStatusColor)
-
                 Spacer()
 
                 if store.isChangingServerMode {
                     ProgressView()
                         .controlSize(.small)
                 }
+                Picker(
+                    "电源模式",
+                    selection: Binding(
+                        get: { store.serverModeSnapshot.displayedPowerMode },
+                        set: { mode in store.selectPowerMode(mode) }
+                    )
+                ) {
+                    Text("Normal").tag(PowerMode.normal)
+                    Text("Server").tag(PowerMode.server)
+                    Text("Sleep").tag(PowerMode.sleep)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .controlSize(.small)
+                .frame(width: 200)
+                .disabled(store.isChangingServerMode)
+                .help("切换电源模式")
             }
-
-            Picker(
-                "电源模式",
-                selection: Binding(
-                    get: { store.serverModeSnapshot.displayedPowerMode },
-                    set: { mode in store.selectPowerMode(mode) }
-                )
-            ) {
-                Text("Normal").tag(PowerMode.normal)
-                Text("Server").tag(PowerMode.server)
-                Text("Sleep").tag(PowerMode.sleep)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .disabled(store.isChangingServerMode)
-            .help("切换电源模式")
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
@@ -132,9 +151,7 @@ struct MenuBarContentView: View {
                     .lineLimit(2)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.65), in: RoundedRectangle(cornerRadius: 8))
+        .monitorCard()
     }
 
     private var content: some View {
@@ -204,24 +221,76 @@ struct MenuBarContentView: View {
             .buttonStyle(.plain)
 
             if isServiceMonitorExpanded {
-                Picker("监测内容", selection: $showsProcessUsage) {
-                    Text("端口 / 服务").tag(false)
-                    Text("进程占用").tag(true)
+                Picker("监测内容", selection: $monitorTab) {
+                    ForEach(MonitorTab.allCases, id: \.self) { tab in
+                        Text(tab.rawValue).tag(tab)
+                    }
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
                 .padding(.top, 10)
 
-                if showsProcessUsage, let processStore {
-                    HeavyProcessMonitorView(processStore: processStore)
-                        .padding(.top, 10)
-                } else {
-                    serviceMonitorDetails
-                        .padding(.top, 10)
+                Group {
+                    switch monitorTab {
+                    case .ports:
+                        portMonitorDetails
+                    case .services:
+                        serviceMonitorDetails
+                    case .processes:
+                        if let processStore {
+                            HeavyProcessMonitorView(processStore: processStore)
+                        } else {
+                            Text("暂无进程占用数据")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
+                .padding(.top, 10)
             }
         }
-        .padding(10)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.65), in: RoundedRectangle(cornerRadius: 8))
+        .monitorCard()
+    }
+
+    private var portMonitorDetails: some View {
+        let entries = store.services.flatMap { service in
+            service.endpoints.map { (service: service, endpoint: $0) }
+        }.sorted {
+            if $0.endpoint.port != $1.endpoint.port { return $0.endpoint.port < $1.endpoint.port }
+            if $0.service.id != $1.service.id { return $0.service.id < $1.service.id }
+            return "\($0.endpoint.transport.rawValue):\($0.endpoint.address)"
+                < "\($1.endpoint.transport.rawValue):\($1.endpoint.address)"
+        }
+        return VStack(alignment: .leading, spacing: 8) {
+            if !store.snapshot.issues.isEmpty { issueBanner }
+            if entries.isEmpty {
+                Text(store.isRefreshing ? "正在扫描端口…" : "暂无监听端口")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 8)
+            }
+            ForEach(entries.indices, id: \.self) { index in
+                let entry = entries[index]
+                HStack(spacing: 10) {
+                    Text(String(entry.endpoint.port))
+                        .font(.system(.subheadline, design: .monospaced).weight(.semibold))
+                        .frame(width: 54, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(entry.service.displayName)
+                            .font(.caption.weight(.medium))
+                            .lineLimit(1)
+                        Text("\(entry.endpoint.transport.rawValue.uppercased()) · \(entry.endpoint.address)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
+            }
+        }
     }
 
     private var serviceMonitorDetails: some View {

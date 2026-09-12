@@ -28,17 +28,18 @@ struct TemperatureMonitorSection: View {
     @ObservedObject var temperatureStore: TemperatureStore
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 10) {
             header
             TemperatureChartView(store: temperatureStore)
         }
+        .monitorCard()
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Label("温度监测", systemImage: "thermometer.medium")
-                    .font(.headline)
+                    .font(.subheadline.weight(.semibold))
 
                 Spacer()
 
@@ -69,7 +70,6 @@ struct TemperatureMonitorSection: View {
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
-        .padding(14)
     }
 
 }
@@ -96,8 +96,6 @@ private extension HeavyProcessMonitorView {
                 }
             }
         }
-        .padding(10)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.65), in: RoundedRectangle(cornerRadius: 12))
     }
 
     private func closeConfirmation(for process: HeavyProcess) -> some View {
@@ -260,8 +258,6 @@ struct TemperatureChartView: View {
             chartContent
                 .frame(height: 148)
         }
-        .padding(12)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.65), in: RoundedRectangle(cornerRadius: 12))
     }
 
     @ViewBuilder

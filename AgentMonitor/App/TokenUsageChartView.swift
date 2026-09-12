@@ -60,19 +60,7 @@ struct TokenUsageChartView: View {
             reviewStatus(snapshot: displayedSnapshot)
             scanDiagnosticsStatus
         }
-        .padding(12)
-        .background(
-            LinearGradient(
-                colors: [.blue.opacity(0.10), .purple.opacity(0.08)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: 12)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(.quaternary, lineWidth: 1)
-        }
+        .monitorCard()
         .task(id: range) {
             while !Task.isCancelled {
                 await store.refresh(range: range)
