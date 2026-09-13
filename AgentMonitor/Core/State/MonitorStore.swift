@@ -18,6 +18,8 @@ final class MonitorStore: ObservableObject {
     private var serverModeRefreshTask: Task<Void, Never>?
     private var refreshInFlight = false
     private var pendingPowerMode: PowerMode?
+    private var powerModeTask: Task<Void, Never>?
+    private var powerModeWaiters: [CheckedContinuation<Void, Never>] = []
 
     init(
         discoverer: any ServiceDiscovering,
@@ -108,6 +110,11 @@ final class MonitorStore: ObservableObject {
     func refreshServerMode() async {
         guard let serverModeController else { return }
         guard !isChangingServerMode else { return }
+        isChangingServerMode = true
+        defer {
+            isChangingServerMode = false
+            startPowerModeTaskIfNeeded()
+        }
         if let scheduledSnapshot = await serverModeController.reconcileSchedule(now: Date()) {
             serverModeSnapshot = scheduledSnapshot
         } else {
@@ -121,24 +128,14 @@ final class MonitorStore: ObservableObject {
 
     func selectPowerMode(_ mode: PowerMode) {
         previewRequestedMode(mode)
-        if isChangingServerMode {
-            pendingPowerMode = mode
-            return
-        }
-        isChangingServerMode = true
-        Task { await applyPowerMode(mode) }
+        enqueuePowerMode(mode)
     }
 
     func setPowerMode(_ mode: PowerMode) async {
         previewRequestedMode(mode)
-        if isChangingServerMode {
-            pendingPowerMode = mode
-            while isChangingServerMode {
-                await Task.yield()
-            }
-            return
+        await withCheckedContinuation { continuation in
+            enqueuePowerMode(mode, waiter: continuation)
         }
-        await applyPowerMode(mode)
     }
 
     private func previewRequestedMode(_ mode: PowerMode) {
@@ -154,16 +151,51 @@ final class MonitorStore: ObservableObject {
         serverModeSnapshot = preview
     }
 
-    private func applyPowerMode(_ mode: PowerMode) async {
-        defer { isChangingServerMode = false }
-        guard let serverModeController else { return }
-
-        var snapshot = await serverModeController.setMode(mode)
-        while let pending = pendingPowerMode {
-            pendingPowerMode = nil
-            snapshot = await serverModeController.setMode(pending)
+    private func enqueuePowerMode(
+        _ mode: PowerMode,
+        waiter: CheckedContinuation<Void, Never>? = nil
+    ) {
+        guard serverModeController != nil else {
+            waiter?.resume()
+            return
         }
-        serverModeSnapshot = snapshot
+        pendingPowerMode = mode
+        if let waiter {
+            powerModeWaiters.append(waiter)
+        }
+        startPowerModeTaskIfNeeded()
+    }
+
+    private func startPowerModeTaskIfNeeded() {
+        guard !isChangingServerMode, powerModeTask == nil, pendingPowerMode != nil else { return }
+
+        isChangingServerMode = true
+        powerModeTask = Task { await drainPowerModeQueue() }
+    }
+
+    private func drainPowerModeQueue() async {
+        guard let serverModeController else {
+            finishPowerModeQueue()
+            return
+        }
+
+        var latestSnapshot: ServerModeSnapshot?
+        while let mode = pendingPowerMode {
+            pendingPowerMode = nil
+            latestSnapshot = await serverModeController.setMode(mode)
+        }
+        if let latestSnapshot {
+            serverModeSnapshot = latestSnapshot
+        }
+        finishPowerModeQueue()
+    }
+
+    private func finishPowerModeQueue() {
+        isChangingServerMode = false
+        powerModeTask = nil
+        let waiters = powerModeWaiters
+        powerModeWaiters.removeAll()
+        waiters.forEach { $0.resume() }
     }
 
     func updatePowerModeSchedule(_ schedule: PowerModeSchedule) async {
@@ -171,7 +203,10 @@ final class MonitorStore: ObservableObject {
         guard !isChangingServerMode else { return }
 
         isChangingServerMode = true
-        defer { isChangingServerMode = false }
+        defer {
+            isChangingServerMode = false
+            startPowerModeTaskIfNeeded()
+        }
 
         serverModeSnapshot = await serverModeController.setSchedule(schedule, now: Date())
     }

@@ -265,6 +265,15 @@ final class ServerModeController: ServerModeControlling {
     }
 
     func setMode(_ mode: PowerMode) async -> ServerModeSnapshot {
+        await changeMode(mode).snapshot
+    }
+
+    private struct ModeChangeResult {
+        var snapshot: ServerModeSnapshot
+        var succeeded: Bool
+    }
+
+    private func changeMode(_ mode: PowerMode) async -> ModeChangeResult {
         settingsStore.requestedMode = mode
 
         do {
@@ -287,20 +296,30 @@ final class ServerModeController: ServerModeControlling {
             if mode == .sleep {
                 settingsStore.requestedMode = .normal
             }
-            return (await refresh()).withMessage("切换 \(mode.title) 失败：\(errorMessage(from: error))")
+            return ModeChangeResult(
+                snapshot: (await refresh()).withMessage("切换 \(mode.title) 失败：\(errorMessage(from: error))"),
+                succeeded: false
+            )
         }
 
         let snapshot = await refresh()
-        guard snapshot.state != .unknown else { return snapshot }
+        guard snapshot.state != .unknown else {
+            return ModeChangeResult(snapshot: snapshot, succeeded: false)
+        }
 
         if mode == .server && !snapshot.isEnabled {
-            settingsStore.requestedMode = .normal
-            return (await refresh()).withMessage("pmset 已执行，但系统未进入 Server。")
+            return ModeChangeResult(
+                snapshot: snapshot.withMessage("pmset 已执行，但系统未进入 Server；已保留你的 Server 请求。"),
+                succeeded: false
+            )
         }
         if mode != .server && snapshot.isEnabled {
-            return snapshot.withMessage("pmset 已执行，但系统仍处于 Server。")
+            return ModeChangeResult(
+                snapshot: snapshot.withMessage("pmset 已执行，但系统仍处于 Server。"),
+                succeeded: false
+            )
         }
-        return snapshot
+        return ModeChangeResult(snapshot: snapshot, succeeded: true)
     }
 
     func setSchedule(_ schedule: PowerModeSchedule, now: Date) async -> ServerModeSnapshot {
@@ -317,9 +336,12 @@ final class ServerModeController: ServerModeControlling {
             return nil
         }
 
+        let result = await changeMode(event.mode)
+        guard result.succeeded else {
+            return result.snapshot
+        }
         settingsStore.lastAppliedScheduleEventID = event.id
-        let snapshot = await setMode(event.mode)
-        return snapshot.withMessage("\(event.mode.title) 已按定时规则切换。")
+        return result.snapshot.withMessage("\(event.mode.title) 已按定时规则切换。")
     }
 
     private func ensureCaffeinateRunning() throws {
@@ -338,9 +360,6 @@ final class ServerModeController: ServerModeControlling {
             }
             return
         }
-        if settingsStore.requestedMode == .server, state == .disabled {
-            settingsStore.requestedMode = .normal
-        }
     }
 
     private func waitForSleepDisabled(_ expected: ServerModeState) async {
@@ -358,6 +377,8 @@ final class ServerModeController: ServerModeControlling {
         switch state {
         case .unknown:
             return "无法确认 SleepDisabled 状态。"
+        case .disabled where settingsStore.requestedMode == .server:
+            return "Server 请求仍在，但系统当前未启用 SleepDisabled。"
         case .enabled, .disabled:
             return nil
         }
@@ -504,11 +525,15 @@ final class SystemCaffeinateManager: CaffeinateManaging {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/caffeinate")
-        process.arguments = ["-i", "-m", "-s", "-w", String(appPID)]
+        process.arguments = Self.arguments(appPID: appPID)
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         try process.run()
         self.process = process
+    }
+
+    static func arguments(appPID: Int32) -> [String] {
+        ["-d", "-i", "-m", "-s", "-w", String(appPID)]
     }
 
     func stop() {
@@ -531,6 +556,39 @@ private enum ServerModeError: Error {
         case .unsupportedUser(let user):
             return "当前用户名不适合写入 sudoers：\(user)"
         }
+    }
+}
+
+@MainActor
+enum LegacyUserDefaultsMigrator {
+    static let legacyBundleID = "com.lumos.AgentMonitor"
+    static let currentBundleID = "com.lumos.AgentMonitor.v2"
+
+    private static let migrationKey = "migration.com.lumos.AgentMonitor.v1"
+    private static let migratedKeys = [
+        "powerMode.requestedMode",
+        "powerMode.schedule",
+        "powerMode.lastAppliedScheduleEventID",
+        "temperature.highTemperatureAlertEnabled"
+    ]
+
+    static func migrateIfNeeded(
+        bundleID: String? = Bundle.main.bundleIdentifier,
+        destination: UserDefaults = .standard,
+        legacyDomain: [String: Any]? = nil
+    ) {
+        guard bundleID == currentBundleID else { return }
+        guard !destination.bool(forKey: migrationKey) else { return }
+
+        let source = legacyDomain ?? destination.persistentDomain(forName: legacyBundleID)
+        if let source {
+            for key in migratedKeys where destination.object(forKey: key) == nil {
+                if let value = source[key] {
+                    destination.set(value, forKey: key)
+                }
+            }
+        }
+        destination.set(true, forKey: migrationKey)
     }
 }
 

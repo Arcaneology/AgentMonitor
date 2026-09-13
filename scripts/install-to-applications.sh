@@ -9,9 +9,9 @@ if [ -z "$APP" ] || [ ! -d "$APP" ]; then
   echo "usage: $0 path/to/AgentMonitor.app" >&2
   exit 1
 fi
-if [ "${CONFIGURATION:-}" != "Release" ]; then
-  echo "Skipping Applications install for ${CONFIGURATION:-unknown} build"
-  exit 0
+if [ "${AGENT_MONITOR_EXPLICIT_INSTALL:-}" != "1" ]; then
+  echo "Refusing implicit install. Use scripts/build-and-install-release.sh." >&2
+  exit 2
 fi
 if [ -e "$APP/Contents/MacOS/AgentMonitor.debug.dylib" ] || [ -e "$APP/Contents/MacOS/__preview.dylib" ]; then
   echo "Skipping Applications install for preview/debug stub"
@@ -25,16 +25,8 @@ ditto "$APP" "$STAGED_APP"
 test -x "$STAGED_APP/Contents/MacOS/AgentMonitor"
 BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$STAGED_APP/Contents/Info.plist")"
 
-# This build phase runs before Xcode's final CodeSign step. A copied Release
-# bundle can therefore still have only the linker's executable signature, whose
-# identifier is "AgentMonitor" instead of the Info.plist bundle identifier.
-# That leaves the installed bundle's signing identity inconsistent with its
-# Info.plist and can destabilize LaunchServices/menu-bar identity tracking.
-# Complete the local signature before replacing the installed application.
-SIGNED_ID="$(/usr/bin/codesign -dv --verbose=4 "$STAGED_APP" 2>&1 | /usr/bin/sed -n 's/^Identifier=//p' | /usr/bin/head -n 1 || true)"
-if [ "$SIGNED_ID" != "$BUNDLE_ID" ]; then
-  /usr/bin/codesign --force --deep --sign - --options runtime --timestamp=none "$STAGED_APP"
-fi
+# The caller passes a completed Release product after Xcode's final signing.
+# Installation validates that product and never repairs or invents a signature.
 /usr/bin/codesign --verify --deep --strict "$STAGED_APP"
 VERIFIED_ID="$(/usr/bin/codesign -dv --verbose=4 "$STAGED_APP" 2>&1 | /usr/bin/sed -n 's/^Identifier=//p' | /usr/bin/head -n 1)"
 if [ "$VERIFIED_ID" != "$BUNDLE_ID" ]; then

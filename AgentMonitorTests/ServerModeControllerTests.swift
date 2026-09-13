@@ -200,26 +200,30 @@ final class ServerModeControllerTests: XCTestCase {
         XCTAssertNil(snapshot.message)
     }
 
-    func testRefreshClearsStaleServerRequestWhenSleepDisabledIsDisabled() async {
+    func testRefreshPreservesServerIntentAndProtectionAcrossTransientDisabledState() async {
         let caffeinateManager = FakeCaffeinateManager(isRunning: true)
         let settingsStore = FakePowerModeSettingsStore()
         settingsStore.requestedMode = .server
+        let reader = FakeSleepDisabledReader(state: .disabled)
         let controller = ServerModeController(
             commandRunner: RecordingCommandRunner(responses: []),
             caffeinateManager: caffeinateManager,
             settingsStore: settingsStore,
-            sleepDisabledReader: FakeSleepDisabledReader(state: .disabled)
+            sleepDisabledReader: reader
         )
 
-        let snapshot = await controller.refresh()
+        let disabledSnapshot = await controller.refresh()
+        reader.state = .enabled
+        let recoveredSnapshot = await controller.refresh()
 
-        XCTAssertEqual(settingsStore.requestedMode, .normal)
-        XCTAssertEqual(snapshot.requestedMode, .normal)
-        XCTAssertEqual(snapshot.effectiveMode, .normal)
-        XCTAssertEqual(snapshot.displayedPowerMode, .normal)
-        XCTAssertFalse(snapshot.isCaffeinateRunning)
-        XCTAssertEqual(caffeinateManager.stopCount, 1)
-        XCTAssertNil(snapshot.message)
+        XCTAssertEqual(settingsStore.requestedMode, .server)
+        XCTAssertEqual(disabledSnapshot.requestedMode, .server)
+        XCTAssertEqual(disabledSnapshot.effectiveMode, .normal)
+        XCTAssertTrue(disabledSnapshot.isCaffeinateRunning)
+        XCTAssertEqual(disabledSnapshot.message, "Server 请求仍在，但系统当前未启用 SleepDisabled。")
+        XCTAssertEqual(recoveredSnapshot.effectiveMode, .server)
+        XCTAssertTrue(recoveredSnapshot.isCaffeinateRunning)
+        XCTAssertEqual(caffeinateManager.stopCount, 0)
     }
 
     func testSetModeNormalKeepsRequestedModeWhenSleepDisabledStaysEnabled() async {
@@ -244,7 +248,7 @@ final class ServerModeControllerTests: XCTestCase {
         XCTAssertEqual(snapshot.message, "pmset 已执行，但系统仍处于 Server。")
     }
 
-    func testSetModeServerRevertsWhenSleepDisabledStaysDisabled() async {
+    func testSetModeServerKeepsIntentWhenSleepDisabledStaysDisabled() async {
         let settingsStore = FakePowerModeSettingsStore()
         let controller = ServerModeController(
             commandRunner: RecordingCommandRunner(responses: [.success()]),
@@ -255,11 +259,97 @@ final class ServerModeControllerTests: XCTestCase {
 
         let snapshot = await controller.setMode(.server)
 
-        XCTAssertEqual(settingsStore.requestedMode, .normal)
-        XCTAssertEqual(snapshot.requestedMode, .normal)
+        XCTAssertEqual(settingsStore.requestedMode, .server)
+        XCTAssertEqual(snapshot.requestedMode, .server)
         XCTAssertEqual(snapshot.effectiveMode, .normal)
         XCTAssertEqual(snapshot.displayedPowerMode, .normal)
-        XCTAssertEqual(snapshot.message, "pmset 已执行，但系统未进入 Server。")
+        XCTAssertTrue(snapshot.isCaffeinateRunning)
+        XCTAssertEqual(snapshot.message, "pmset 已执行，但系统未进入 Server；已保留你的 Server 请求。")
+    }
+
+    func testScheduleFailureKeepsErrorAndRemainsRetryable() async throws {
+        let runner = RecordingCommandRunner(responses: [
+            .failure(error: "sudo failed"),
+            .failure(error: "authorization cancelled"),
+            .failure(error: "sudo failed"),
+            .failure(error: "authorization cancelled")
+        ])
+        let settingsStore = FakePowerModeSettingsStore()
+        settingsStore.schedule = PowerModeSchedule(
+            nightlySleep: PowerModeSchedule.default.nightlySleep,
+            workdayServer: PowerModeScheduleRule(
+                id: .workdayServer,
+                mode: .server,
+                hour: 8,
+                minute: 0,
+                weekdays: Set(2...6),
+                isEnabled: true
+            )
+        )
+        let controller = ServerModeController(
+            commandRunner: runner,
+            settingsStore: settingsStore,
+            sleepDisabledReader: FakeSleepDisabledReader(state: .disabled),
+            calendar: makeCalendar()
+        )
+
+        let first = await controller.reconcileSchedule(now: try date("2026-06-22 08:01"))
+        let second = await controller.reconcileSchedule(now: try date("2026-06-22 08:02"))
+
+        XCTAssertNil(settingsStore.lastAppliedScheduleEventID)
+        XCTAssertTrue(first?.message?.contains("切换 Server 失败") == true)
+        XCTAssertNotNil(second)
+    }
+
+    func testCaffeinateArgumentsProtectDisplayAndRemainBoundToApp() {
+        XCTAssertEqual(
+            SystemCaffeinateManager.arguments(appPID: 321),
+            ["-d", "-i", "-m", "-s", "-w", "321"]
+        )
+    }
+
+    func testLegacyDefaultsMigrationCopiesKnownSettingsWithoutOverwritingCurrentValues() {
+        let suiteName = "AgentMonitorTests.LegacyDefaults.\(UUID().uuidString)"
+        guard let destination = UserDefaults(suiteName: suiteName) else {
+            return XCTFail("Unable to create isolated UserDefaults suite")
+        }
+        defer { destination.removePersistentDomain(forName: suiteName) }
+        destination.set(PowerMode.normal.rawValue, forKey: "powerMode.requestedMode")
+
+        LegacyUserDefaultsMigrator.migrateIfNeeded(
+            bundleID: LegacyUserDefaultsMigrator.currentBundleID,
+            destination: destination,
+            legacyDomain: [
+                "powerMode.requestedMode": PowerMode.server.rawValue,
+                "powerMode.lastAppliedScheduleEventID": "workdayServer-1",
+                "temperature.highTemperatureAlertEnabled": false,
+                "unrelated.setting": "do-not-copy"
+            ]
+        )
+
+        XCTAssertEqual(destination.string(forKey: "powerMode.requestedMode"), PowerMode.normal.rawValue)
+        XCTAssertEqual(
+            destination.string(forKey: "powerMode.lastAppliedScheduleEventID"),
+            "workdayServer-1"
+        )
+        XCTAssertEqual(destination.object(forKey: "temperature.highTemperatureAlertEnabled") as? Bool, false)
+        XCTAssertNil(destination.object(forKey: "unrelated.setting"))
+    }
+
+    func testLegacyDefaultsMigrationDoesNotRunForDebugIdentity() {
+        let suiteName = "AgentMonitorTests.LegacyDefaults.Debug.\(UUID().uuidString)"
+        guard let destination = UserDefaults(suiteName: suiteName) else {
+            return XCTFail("Unable to create isolated UserDefaults suite")
+        }
+        defer { destination.removePersistentDomain(forName: suiteName) }
+
+        LegacyUserDefaultsMigrator.migrateIfNeeded(
+            bundleID: "com.lumos.AgentMonitor.Debug",
+            destination: destination,
+            legacyDomain: ["powerMode.requestedMode": PowerMode.server.rawValue]
+        )
+
+        XCTAssertNil(destination.object(forKey: "powerMode.requestedMode"))
     }
 
     func testSudoersInstallerRejectsUnexpectedUsernames() {

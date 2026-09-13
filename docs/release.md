@@ -14,7 +14,13 @@ xcodebuild \
   build
 ```
 
-产物位于 `/tmp/AgentMonitorDerivedData/Build/Products/Debug/AgentMonitor.app`。`Release` 构建成功后会自动覆盖安装到 `/Applications/AgentMonitor.app`；首次运行不会请求管理员权限。当前日常使用的就是 `/Applications` 里这份应用，安装后需要重新打开它才会加载新版本。
+产物位于 `/tmp/AgentMonitorDerivedData/Build/Products/Debug/AgentMonitor.app`。普通 `Debug`、`Release` 构建和测试都不会触碰 `/Applications/AgentMonitor.app`。需要替换本机日常使用版本时，显式执行：
+
+```bash
+./scripts/build-and-install-release.sh
+```
+
+该命令先完成 Release 构建和最终签名验证，再调用安装脚本替换 `/Applications` 中的版本。安装后需要重新打开应用才会加载新版本。
 
 ## Developer ID 归档
 
@@ -77,6 +83,8 @@ spctl --assess --type execute --verbose=4 \
 
 ## 本机替换与回退
 
-Release 安装脚本会先将完整应用写入临时目录，确认可执行文件存在后，正常退出正在运行的旧实例，再替换安装。旧版本保留在构建日志输出的 `/Applications/.AgentMonitor-install.*/AgentMonitor.previous.app` 路径；失败会尝试恢复原位置。安装不再自动切换前台，完成后重新打开应用。
+Release 安装脚本必须由上述显式构建安装入口调用。它会先将完整应用写入临时目录，验证 bundle identifier 与最终签名，再正常退出正在运行的旧实例并替换安装。旧版本保留在构建日志输出的 `/Applications/.AgentMonitor-install.*/AgentMonitor.previous.backup` 路径；失败会尝试恢复原位置。安装不会自动切换前台，完成后重新打开应用。
+
+2026-09-13：移除了 Xcode target 内的自动安装 build phase。已验证普通 Release 构建不会改变正式包 hash、修改时间或现有 PID；显式流程已安装 build 4，并通过产物／安装包 hash 一致性及 `codesign --verify --deep --strict` 检查。正式标识由被 ControlCenter 异常阻止的 `com.lumos.AgentMonitor` 迁移为 `com.lumos.AgentMonitor.v2`，已知用户设置会在首次启动时迁移。build 4 同时恢复 `.accessory` 激活策略，只显示菜单栏入口，不显示 Dock 图标。菜单栏用户肉眼点击和插电行为的物理验收状态见 `AgentMonitor-Execution-Result-2026-09-13.md`。
 
 2026-09-12：新版 Release 构建及安装成功，安装后再次验证完整 106 项测试通过。旧应用备份保留。Token 数据库在首次打开用量面板、触发刷新时自动备份并迁移；此前的副本核验和详细结果见 Token 验收说明。

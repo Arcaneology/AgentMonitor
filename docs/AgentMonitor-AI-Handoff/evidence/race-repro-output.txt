@@ -1,0 +1,2 @@
+Repository gating logic: maximum concurrent setMode calls = 2
+With missing flag restored: maximum concurrent setMode calls = 1

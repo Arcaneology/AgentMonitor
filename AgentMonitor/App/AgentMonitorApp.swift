@@ -5,13 +5,15 @@ import SwiftUI
 @main
 @MainActor
 struct AgentMonitorApp: App {
+    @State private var isMenuBarInserted = true
     @StateObject private var store: MonitorStore
     @StateObject private var temperatureStore: TemperatureStore
     @StateObject private var heavyProcessStore: HeavyProcessStore
     @StateObject private var tokenUsageStore: TokenUsageStore
 
     init() {
-        NSApplication.shared.setActivationPolicy(.regular)
+        LegacyUserDefaultsMigrator.migrateIfNeeded()
+        NSApplication.shared.setActivationPolicy(.accessory)
         let dependencies = AppDependencies.make()
         _store = StateObject(wrappedValue: dependencies.store)
         _temperatureStore = StateObject(wrappedValue: dependencies.temperatureStore)
@@ -45,10 +47,18 @@ struct AgentMonitorApp: App {
                 )
             }
             .frame(width: 420)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("恢复菜单栏入口", systemImage: "menubar.rectangle") {
+                        restoreMenuBarItem()
+                    }
+                    .help("按你的操作重新插入 AgentMonitor 菜单栏入口")
+                }
+            }
         }
         .defaultSize(width: 420, height: 760)
 
-        MenuBarExtra {
+        MenuBarExtra(isInserted: $isMenuBarInserted) {
             MenuBarContentView(
                 store: store,
                 tokenUsageStore: tokenUsageStore,
@@ -62,6 +72,14 @@ struct AgentMonitorApp: App {
             }
         }
         .menuBarExtraStyle(.window)
+    }
+
+    private func restoreMenuBarItem() {
+        isMenuBarInserted = false
+        Task { @MainActor in
+            await Task.yield()
+            isMenuBarInserted = true
+        }
     }
 
 }

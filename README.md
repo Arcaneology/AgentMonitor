@@ -2,6 +2,8 @@
 
 Agent Monitor 是一个面向 macOS 14+ 的原生菜单栏应用，用于自动发现当前用户的本地服务、开发服务器和监听端口，并展示实时内存占用。
 
+应用以菜单栏附件模式运行，不在 Dock 中显示图标。所有日常功能均从顶部菜单栏入口打开。
+
 ## 已实现
 
 - 每 2 秒发现当前用户的 TCP 监听端口和 UDP 本地端点。
@@ -27,9 +29,15 @@ xcodebuild \
   build
 ```
 
-也可以直接使用 Xcode 打开 `AgentMonitor.xcodeproj` 并运行 `AgentMonitor` scheme。`Release` 构建成功后会把 `AgentMonitor.app` 安装到 `/Applications`；Debug / 测试构建不会覆盖日常使用的应用。
+也可以直接使用 Xcode 打开 `AgentMonitor.xcodeproj` 并运行 `AgentMonitor` scheme。普通 `Debug` / `Release` 构建和测试都不会改动 `/Applications`。需要安装已完成签名的 Release 版本时，显式运行：
 
-Debug 构建使用独立的 bundle identifier `com.lumos.AgentMonitor.Debug`，避免 Xcode 临时实例与 `/Applications` 中的 Release 应用共享 LaunchServices 和菜单栏状态记录；Release 仍使用 `com.lumos.AgentMonitor`。
+```bash
+./scripts/build-and-install-release.sh
+```
+
+该流程会先完成构建与最终签名，验证签名和 Bundle ID 后才替换正式应用，并保留上一个安装包供回滚。
+
+Debug 构建使用独立的 bundle identifier `com.lumos.AgentMonitor.Debug`，正式安装版使用 `com.lumos.AgentMonitor.v2`，避免开发实例与正式应用共享 LaunchServices 和菜单栏状态记录。正式版首次以新标识启动时，会迁移旧标识下已有的电源模式、定时计划和温度提醒设置。
 
 ## 测试
 

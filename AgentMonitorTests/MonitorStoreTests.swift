@@ -195,6 +195,51 @@ final class MonitorStoreTests: XCTestCase {
         XCTAssertEqual(controller.refreshCount, 1)
     }
 
+    func testAsyncPowerModeRequestsNeverOverlapAndLatestRequestWins() async {
+        let controller = ConcurrencyTrackingServerModeController()
+        let store = MonitorStore(
+            discoverer: StaticDiscoverer(snapshot: .empty),
+            serverModeController: controller
+        )
+
+        let first = Task { await store.setPowerMode(.server) }
+        await Task.yield()
+        let second = Task { await store.setPowerMode(.normal) }
+        await first.value
+        await second.value
+
+        XCTAssertEqual(controller.maximumConcurrentCalls, 1)
+        XCTAssertEqual(controller.receivedModes, [.server, .normal])
+        XCTAssertEqual(store.serverModeSnapshot.requestedMode, .normal)
+        XCTAssertFalse(store.isChangingServerMode)
+    }
+
+    func testUserPowerRequestWaitsForScheduledReconciliation() async {
+        let controller = ScheduledOverlapServerModeController()
+        let store = MonitorStore(
+            discoverer: StaticDiscoverer(snapshot: .empty),
+            serverModeController: controller
+        )
+
+        let refresh = Task { await store.refreshServerMode() }
+        await controller.waitUntilScheduleBlocked()
+        store.selectPowerMode(.normal)
+        await Task.yield()
+
+        XCTAssertEqual(controller.setModeCount, 0)
+        XCTAssertEqual(controller.maximumConcurrentCalls, 1)
+
+        controller.resumeSchedule()
+        await refresh.value
+        while store.isChangingServerMode {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(controller.setModeCount, 1)
+        XCTAssertEqual(controller.maximumConcurrentCalls, 1)
+        XCTAssertEqual(store.serverModeSnapshot.requestedMode, .normal)
+    }
+
     /// Services without a project or LaunchAgent remain visible as user services.
     func testIncludesServicesWithoutAProjectOrLaunchAgent() async {
         let project = makeExampleService(id: "project", displayName: "Project")
@@ -350,5 +395,87 @@ private final class DelayedFakeServerModeController: ServerModeControlling {
         while continuation == nil {
             await Task.yield()
         }
+    }
+}
+
+@MainActor
+private final class ConcurrencyTrackingServerModeController: ServerModeControlling {
+    private(set) var activeCalls = 0
+    private(set) var maximumConcurrentCalls = 0
+    private(set) var receivedModes: [PowerMode] = []
+
+    func refresh() async -> ServerModeSnapshot { .unknown }
+
+    func setEnabled(_ enabled: Bool) async -> ServerModeSnapshot {
+        await setMode(enabled ? .server : .normal)
+    }
+
+    func setMode(_ mode: PowerMode) async -> ServerModeSnapshot {
+        activeCalls += 1
+        maximumConcurrentCalls = max(maximumConcurrentCalls, activeCalls)
+        receivedModes.append(mode)
+        try? await Task.sleep(for: .milliseconds(20))
+        activeCalls -= 1
+        return ServerModeSnapshot(
+            state: mode == .server ? .enabled : .disabled,
+            requestedMode: mode,
+            effectiveMode: mode == .server ? .server : .normal,
+            isCaffeinateRunning: mode == .server,
+            schedule: .default,
+            message: nil
+        )
+    }
+
+    func setSchedule(_ schedule: PowerModeSchedule, now: Date) async -> ServerModeSnapshot { .unknown }
+    func reconcileSchedule(now: Date) async -> ServerModeSnapshot? { nil }
+}
+
+@MainActor
+private final class ScheduledOverlapServerModeController: ServerModeControlling {
+    private var activeCalls = 0
+    private var scheduleContinuation: CheckedContinuation<Void, Never>?
+    private(set) var maximumConcurrentCalls = 0
+    private(set) var setModeCount = 0
+
+    func refresh() async -> ServerModeSnapshot { .unknown }
+
+    func setEnabled(_ enabled: Bool) async -> ServerModeSnapshot {
+        await setMode(enabled ? .server : .normal)
+    }
+
+    func setMode(_ mode: PowerMode) async -> ServerModeSnapshot {
+        activeCalls += 1
+        maximumConcurrentCalls = max(maximumConcurrentCalls, activeCalls)
+        setModeCount += 1
+        activeCalls -= 1
+        return ServerModeSnapshot(
+            state: mode == .server ? .enabled : .disabled,
+            requestedMode: mode,
+            effectiveMode: mode == .server ? .server : .normal,
+            isCaffeinateRunning: mode == .server,
+            schedule: .default,
+            message: nil
+        )
+    }
+
+    func setSchedule(_ schedule: PowerModeSchedule, now: Date) async -> ServerModeSnapshot { .unknown }
+
+    func reconcileSchedule(now: Date) async -> ServerModeSnapshot? {
+        activeCalls += 1
+        maximumConcurrentCalls = max(maximumConcurrentCalls, activeCalls)
+        await withCheckedContinuation { scheduleContinuation = $0 }
+        activeCalls -= 1
+        return nil
+    }
+
+    func waitUntilScheduleBlocked() async {
+        while scheduleContinuation == nil {
+            await Task.yield()
+        }
+    }
+
+    func resumeSchedule() {
+        scheduleContinuation?.resume()
+        scheduleContinuation = nil
     }
 }
