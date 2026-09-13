@@ -13,4 +13,3 @@ struct MonitoredProcess: Identifiable, Hashable, Sendable {
     let workingDirectory: URL?
     let memoryBytes: UInt64
 }
-

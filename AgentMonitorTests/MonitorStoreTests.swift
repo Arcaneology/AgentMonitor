@@ -76,7 +76,8 @@ final class MonitorStoreTests: XCTestCase {
         hostingView.layoutSubtreeIfNeeded()
 
         let height = hostingView.fittingSize.height
-        XCTAssertGreaterThanOrEqual(height, 450, "Menu fitting height was \(height)")
+        // The panel viewport is 1200pt while the service list is expanded.
+        XCTAssertGreaterThanOrEqual(height, 1200, "Menu fitting height was \(height)")
     }
 
     func testMenuContentCollapsesServiceRowsByDefault() async {
@@ -102,7 +103,10 @@ final class MonitorStoreTests: XCTestCase {
         collapsedView.layoutSubtreeIfNeeded()
         expandedView.layoutSubtreeIfNeeded()
 
-        XCTAssertLessThan(collapsedView.fittingSize.height, expandedView.fittingSize.height)
+        let collapsedHeight = collapsedView.fittingSize.height
+        let expandedHeight = expandedView.fittingSize.height
+        XCTAssertGreaterThanOrEqual(collapsedHeight, 960, "Menu fitting height was \(collapsedHeight)")
+        XCTAssertEqual(expandedHeight - collapsedHeight, 240, accuracy: 1)
     }
 
     func testStopConfirmationIsRenderedInsideMenuContent() async {
@@ -191,6 +195,29 @@ final class MonitorStoreTests: XCTestCase {
         XCTAssertEqual(controller.refreshCount, 1)
     }
 
+    /// Services without a project or LaunchAgent remain visible as user services.
+    func testIncludesServicesWithoutAProjectOrLaunchAgent() async {
+        let project = makeExampleService(id: "project", displayName: "Project")
+        let strayPort = makeExampleService(
+            id: "stray",
+            displayName: "Example Port",
+            kind: .userProcess
+        )
+        let snapshot = MonitorSnapshot(
+            services: [project, strayPort],
+            issues: [],
+            collectedAt: Date(),
+            collectionDuration: 0.1
+        )
+        let store = MonitorStore(discoverer: StaticDiscoverer(snapshot: snapshot))
+
+        await store.refresh()
+
+        XCTAssertEqual(store.services.count, 2)
+        XCTAssertEqual(store.services.map(\.id), ["project", "stray"])
+        XCTAssertEqual(store.serviceCount, 2)
+    }
+
     func testSortsServicesByMemoryInBothDirections() {
         let low = makeExampleService(id: "low", displayName: "Low", memoryBytes: 8)
         let high = makeExampleService(id: "high", displayName: "High", memoryBytes: 64)
@@ -208,7 +235,8 @@ final class MonitorStoreTests: XCTestCase {
     private func makeExampleService(
         id: String = "example",
         displayName: String = "Example Project",
-        memoryBytes: UInt64 = 32 * 1_024 * 1_024
+        memoryBytes: UInt64 = 32 * 1_024 * 1_024,
+        kind: MonitoredService.Kind = .localProject
     ) -> MonitoredService {
         let process = MonitoredProcess(
             id: ProcessIdentity(pid: 42, startTime: Date(timeIntervalSince1970: 42)),
@@ -221,7 +249,7 @@ final class MonitorStoreTests: XCTestCase {
         return MonitoredService(
             id: id,
             displayName: displayName,
-            kind: .localProject,
+            kind: kind,
             projectRoot: process.workingDirectory,
             launchAgentLabel: nil,
             processes: [process],

@@ -6,7 +6,7 @@ import XCTest
 final class TokenUsageTests: XCTestCase {
     func testFormatsTokenCountsUsingChineseUnits() {
         XCTAssertEqual(TokenCountFormatter.compact(9_999), "9999")
-        XCTAssertEqual(TokenCountFormatter.compact(90_365_523), "9036.55万")
+        XCTAssertEqual(TokenCountFormatter.compact(90_365_523), "0.90亿")
         XCTAssertEqual(TokenCountFormatter.compact(1_572_098_149), "15.72亿")
     }
 

@@ -124,10 +124,53 @@ final class TokenUsageIntegrationTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: missingCC.path))
     }
 
+
+    /// The panel refreshes through reload, which must not re-read the session
+    /// logs: switching the time range has to render from the stored records.
+    @MainActor
+    func testReloadAnswersFromStoredRecordsWithoutIngestingNewLogLines() async throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let dbURL = home.appendingPathComponent("usage.db")
+        let missingCC = home.appendingPathComponent("cc-switch.db")
+        let claude = home.appendingPathComponent(".claude/projects/p/session.jsonl")
+        try write("""
+        {"type":"assistant","timestamp":"2026-09-11T01:00:00Z","sessionId":"s1","message":{"id":"m1","model":"claude-opus-5","usage":{"input_tokens":20,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":8},"stop_reason":"end_turn"}}
+        """ + "\n", to: claude)
+        let now = ISO8601DateFormatter().date(from: "2026-09-11T03:00:00Z")!
+
+        let database = TokenUsageDatabase(
+            databaseURL: dbURL,
+            ccSwitchDatabaseURL: missingCC,
+            sessionRoots: .default(home: home)
+        )
+        let store = TokenUsageStore(reader: database)
+        await store.reload(range: .last24Hours, now: now)
+        XCTAssertEqual(store.snapshot?.totalTokens, 0, "reload must not ingest on its own")
+
+        await store.ingestSessionLogs(now: now)
+        await store.reload(range: .last24Hours, now: now)
+        XCTAssertEqual(store.snapshot?.totalTokens, 28)
+
+        // A second ingest inside the interval is skipped, so the appended line
+        // stays invisible until the interval elapses or a full refresh runs.
+        try append("""
+        {"type":"assistant","timestamp":"2026-09-11T01:05:00Z","sessionId":"s1","message":{"id":"m2","model":"claude-opus-5","usage":{"input_tokens":30,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":2},"stop_reason":"end_turn"}}
+        """ + "\n", to: claude)
+        await store.ingestSessionLogs(now: now.addingTimeInterval(1))
+        await store.reload(range: .last24Hours, now: now)
+        XCTAssertEqual(store.snapshot?.totalTokens, 28)
+
+        await store.ingestSessionLogs(now: now.addingTimeInterval(TokenUsageStore.ingestInterval + 1))
+        await store.reload(range: .last24Hours, now: now)
+        XCTAssertEqual(store.snapshot?.totalTokens, 60)
+    }
+
     private func write(_ value: String, to url: URL) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try value.write(to: url, atomically: true, encoding: .utf8)
     }
+
 
     private func append(_ value: String, to url: URL) throws {
         let handle = try FileHandle(forWritingTo: url)

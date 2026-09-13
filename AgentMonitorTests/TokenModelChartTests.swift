@@ -187,6 +187,67 @@ final class TokenModelChartTests: XCTestCase {
         )
     }
 
+    // MARK: - Chip rows
+
+    func testFamilyRowListsFamiliesWithUsageAndKeepsTheActiveOneSelectable() {
+        let observed = ["gpt-6-astra", "claude-opus-5", "codex-auto-review"]
+
+        XCTAssertEqual(
+            TokenModelCatalog.familyOptions(observedModelIDs: observed, selectedFamily: nil),
+            [.gpt, .claude],
+            "Unknown-family usage must not create a family chip"
+        )
+        XCTAssertEqual(
+            TokenModelCatalog.familyOptions(observedModelIDs: observed, selectedFamily: .gemini),
+            [.gpt, .claude, .gemini],
+            "A selected family stays listed so it can be cleared even without data in this range"
+        )
+    }
+
+    func testModelRowNarrowsToTheSelectedFamilyAndKeepsTheSelectedModel() {
+        let observed = ["gpt-6-astra", "gpt-5.6-sol", "claude-opus-5", "claude-sonnet-5"]
+
+        XCTAssertEqual(
+            TokenModelCatalog.modelOptions(
+                observedModelIDs: observed,
+                selectedModelID: nil,
+                selectedFamily: nil
+            ),
+            ["gpt-6-astra", "gpt-5.6-sol", "claude-opus-5", "claude-sonnet-5"],
+            "Without a family filter every observed model stays visible"
+        )
+
+        XCTAssertEqual(
+            TokenModelCatalog.modelOptions(
+                observedModelIDs: observed,
+                selectedModelID: nil,
+                selectedFamily: .claude
+            ),
+            ["claude-opus-5", "claude-sonnet-5"],
+            "Selecting a family narrows the model chips to that family"
+        )
+
+        XCTAssertEqual(
+            TokenModelCatalog.modelOptions(
+                observedModelIDs: observed,
+                selectedModelID: "gpt-6-astra",
+                selectedFamily: .claude
+            ),
+            ["gpt-6-astra", "claude-opus-5", "claude-sonnet-5"],
+            "A selected model stays listed so it can be deselected"
+        )
+    }
+
+    func testModelOptionsCanonicalizeProviderSpellingsBeforeDeduplicating() {
+        let options = TokenModelCatalog.modelOptions(
+            observedModelIDs: ["openai/gpt-6-astra", "gpt-6-astra", "anthropic/claude-opus-5"],
+            selectedModelID: nil,
+            selectedFamily: .gpt
+        )
+
+        XCTAssertEqual(options, ["gpt-6-astra"])
+    }
+
     @MainActor
     func testDisplayYUpperBoundUsesWholeTokenCells() {
         let start = Date(timeIntervalSince1970: 0)

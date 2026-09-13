@@ -147,6 +147,36 @@ final class ServiceDiscoveryTests: XCTestCase {
             .write(to: root.appendingPathComponent("package.json"))
         return root
     }
+
+    // MARK: - Endpoint links
+
+    func testLocalServiceURLBuildsBrowserLinksForTCPEndpoints() {
+        XCTAssertEqual(
+            ListeningEndpoint(address: "127.0.0.1", port: 3_000, transport: .tcp).localServiceURL?.absoluteString,
+            "http://127.0.0.1:3000"
+        )
+        XCTAssertEqual(
+            ListeningEndpoint(address: "*", port: 5_174, transport: .tcp).localServiceURL?.absoluteString,
+            "http://localhost:5174",
+            "A wildcard bind is reachable through localhost"
+        )
+        XCTAssertEqual(
+            ListeningEndpoint(address: "0.0.0.0", port: 80, transport: .tcp).localServiceURL?.absoluteString,
+            "http://localhost:80"
+        )
+        XCTAssertEqual(
+            ListeningEndpoint(address: "::1", port: 4_321, transport: .tcp).localServiceURL?.absoluteString,
+            "http://[::1]:4321",
+            "IPv6 literals need brackets in a URL"
+        )
+    }
+
+    func testLocalServiceURLStaysNilForUDPEndpoints() {
+        XCTAssertNil(
+            ListeningEndpoint(address: "127.0.0.1", port: 5_353, transport: .udp).localServiceURL,
+            "A browser cannot open a UDP endpoint"
+        )
+    }
 }
 
 private func makeProcess(

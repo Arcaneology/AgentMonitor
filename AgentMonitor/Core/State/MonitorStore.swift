@@ -34,6 +34,7 @@ final class MonitorStore: ObservableObject {
     }
 
     var services: [MonitoredService] { snapshot.services }
+
     var serviceCount: Int { services.count }
     var portCount: Int {
         Set(services.flatMap(\.endpoints)).count

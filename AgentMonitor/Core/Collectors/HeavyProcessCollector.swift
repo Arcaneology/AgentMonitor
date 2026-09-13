@@ -39,9 +39,12 @@ struct GroupCPUSample: Equatable, Sendable {
 }
 
 enum HeavyProcessAggregator {
-    static let displayLimit = 8
     static let averagingWindow: TimeInterval = 15
 
+    /// Every application group owned by the monitored user is returned, sorted
+    /// by CPU then memory. The panel
+    /// bounds the rendered height instead of dropping rows, so a machine with
+    /// hundreds of helpers stays fully inspectable.
     static func ranked(
         current: [ProcessResourceSnapshot],
         previous: [ProcessIdentity: ProcessResourceSnapshot],
@@ -76,8 +79,6 @@ enum HeavyProcessAggregator {
             }
             return lhs.memoryBytes > rhs.memoryBytes
         }
-        .prefix(displayLimit)
-        .map { $0 }
 
         return (processes, nextHistory)
     }

@@ -3,6 +3,7 @@ set -eu
 
 APP="${1:-}"
 DEST="/Applications/AgentMonitor.app"
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
 if [ -z "$APP" ] || [ ! -d "$APP" ]; then
   echo "usage: $0 path/to/AgentMonitor.app" >&2
@@ -19,9 +20,27 @@ fi
 
 # Stage the complete bundle before stopping or moving the existing app.
 STAGING="$(mktemp -d /Applications/.AgentMonitor-install.XXXXXX)"
-ditto "$APP" "$STAGING/AgentMonitor.app"
-test -x "$STAGING/AgentMonitor.app/Contents/MacOS/AgentMonitor"
-/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$STAGING/AgentMonitor.app/Contents/Info.plist"
+STAGED_APP="$STAGING/AgentMonitor.app"
+ditto "$APP" "$STAGED_APP"
+test -x "$STAGED_APP/Contents/MacOS/AgentMonitor"
+BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$STAGED_APP/Contents/Info.plist")"
+
+# This build phase runs before Xcode's final CodeSign step. A copied Release
+# bundle can therefore still have only the linker's executable signature, whose
+# identifier is "AgentMonitor" instead of the Info.plist bundle identifier.
+# That leaves the installed bundle's signing identity inconsistent with its
+# Info.plist and can destabilize LaunchServices/menu-bar identity tracking.
+# Complete the local signature before replacing the installed application.
+SIGNED_ID="$(/usr/bin/codesign -dv --verbose=4 "$STAGED_APP" 2>&1 | /usr/bin/sed -n 's/^Identifier=//p' | /usr/bin/head -n 1 || true)"
+if [ "$SIGNED_ID" != "$BUNDLE_ID" ]; then
+  /usr/bin/codesign --force --deep --sign - --options runtime --timestamp=none "$STAGED_APP"
+fi
+/usr/bin/codesign --verify --deep --strict "$STAGED_APP"
+VERIFIED_ID="$(/usr/bin/codesign -dv --verbose=4 "$STAGED_APP" 2>&1 | /usr/bin/sed -n 's/^Identifier=//p' | /usr/bin/head -n 1)"
+if [ "$VERIFIED_ID" != "$BUNDLE_ID" ]; then
+  echo "Refusing to install bundle with signature identifier '$VERIFIED_ID'; expected '$BUNDLE_ID'." >&2
+  exit 1
+fi
 
 pids="$(/usr/bin/pgrep -f '^/Applications/AgentMonitor.app/Contents/MacOS/AgentMonitor$' || true)"
 if [ -n "$pids" ]; then
@@ -39,14 +58,26 @@ fi
 
 BACKUP=""
 if [ -e "$DEST" ]; then
-  BACKUP="$STAGING/AgentMonitor.previous.app"
+  "$LSREGISTER" -u "$DEST" >/dev/null 2>&1 || true
+  BACKUP="$STAGING/AgentMonitor.previous.backup"
   mv "$DEST" "$BACKUP"
 fi
-if ! mv "$STAGING/AgentMonitor.app" "$DEST"; then
+if ! mv "$STAGED_APP" "$DEST"; then
   if [ -n "$BACKUP" ]; then mv "$BACKUP" "$DEST"; fi
   echo "Installation failed; previous bundle restored." >&2
   exit 1
 fi
+
+# Keep rollback copies without an app extension. Otherwise LaunchServices can
+# register the backup under the same bundle identifier and System Settings may
+# display "AgentMonitor.previous" instead of the installed application's name.
+RETAINED_BACKUP=""
+if [ -n "$BACKUP" ]; then
+  "$LSREGISTER" -u "$BACKUP" >/dev/null 2>&1 || true
+  RETAINED_BACKUP="$BACKUP"
+fi
+"$LSREGISTER" -f "$DEST" >/dev/null 2>&1 || true
+
 echo "Installed AgentMonitor to $DEST"
-echo "Previous app retained at $BACKUP"
+echo "Previous app retained at $RETAINED_BACKUP"
 echo "Reopen AgentMonitor to load the new version."

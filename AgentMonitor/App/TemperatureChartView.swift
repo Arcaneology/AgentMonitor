@@ -27,6 +27,11 @@ struct HeavyProcessMonitorView: View {
 struct TemperatureMonitorSection: View {
     @ObservedObject var temperatureStore: TemperatureStore
 
+    /// Temporarily disabled: keeps the high-temperature controls in code while
+    /// they are out of the panel. The alert level still follows the saved
+    /// setting, so restoring the switch needs no other change.
+    private static let showsHighTemperatureAlertControls = false
+
     var body: some View {
         VStack(spacing: 10) {
             header
@@ -61,46 +66,73 @@ struct TemperatureMonitorSection: View {
                 }
             }
 
-            Toggle("高温提示", isOn: $temperatureStore.isHighTemperatureAlertEnabled)
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .help("开启后，温度达到 80°C 显示橙色，达到 95°C 显示红色")
+            if Self.showsHighTemperatureAlertControls {
+                Toggle("高温提示", isOn: $temperatureStore.isHighTemperatureAlertEnabled)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .help("开启后，温度达到 80°C 显示橙色，达到 95°C 显示红色")
 
-            Text("80°C 橙色 · 95°C 红色")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+                Text("80°C 橙色 · 95°C 红色")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
         }
     }
 
 }
 
 private extension HeavyProcessMonitorView {
-    var heavyProcessSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("占用较高")
-                .font(.subheadline.weight(.semibold))
+    /// Tallest the process list grows before it scrolls on its own. The panel
+    /// itself already scrolls; without this bound a machine with hundreds of
+    /// helper processes would push everything else far out of reach.
+    static var listMaxHeight: CGFloat { 360 }
 
-            if processStore.processes.isEmpty {
-                Text("暂无当前用户的高占用进程")
+    var heavyProcessSection: some View {
+        let processes = processStore.processes
+        let totalProcesses = processes.reduce(0) { $0 + $1.processCount }
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("全部进程")
+                    .font(.subheadline.weight(.semibold))
+
+                Spacer(minLength: 8)
+
+                Text("共 \(totalProcesses) 个进程 · 按占用排序")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+
+            if processes.isEmpty {
+                Text("暂无进程")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 8)
             } else {
-                ForEach(processStore.processes) { process in
-                    HeavyProcessRow(
-                        process: process,
-                        isTerminating: processStore.isTerminating(process),
-                        onClose: { processToClose = process }
-                    )
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(processes) { process in
+                            HeavyProcessRow(
+                                process: process,
+                                isTerminating: processStore.isTerminating(process),
+                                onClose: { processToClose = process }
+                            )
+
+                            if process.id != processes.last?.id {
+                                Divider().opacity(0.35)
+                            }
+                        }
+                    }
                 }
+                .frame(maxHeight: Self.listMaxHeight)
             }
         }
     }
 
     private func closeConfirmation(for process: HeavyProcess) -> some View {
         VStack(alignment: .leading, spacing: 9) {
-            Text("关闭 \(process.name)？")
+            Text("停止 \(process.name)？")
                 .font(.subheadline.weight(.semibold))
             Text(process.processCount == 1
                  ? "PID \(process.pid) 将被发送 SIGTERM。"
@@ -115,7 +147,7 @@ private extension HeavyProcessMonitorView {
                 }
                 .buttonStyle(.bordered)
 
-                Button("关闭", role: .destructive) {
+                Button("停止", role: .destructive) {
                     processToClose = nil
                     Task { await close(process) }
                 }
@@ -161,7 +193,7 @@ private extension HeavyProcessMonitorView {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.yellow)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("关闭失败")
+                    Text("停止失败")
                         .font(.subheadline.weight(.semibold))
                     Text(message)
                         .font(.caption)
@@ -363,16 +395,7 @@ private struct HeavyProcessRow: View {
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
 
-            if isTerminating {
-                ProgressView()
-                    .controlSize(.small)
-            } else {
-                Button(role: .destructive, action: onClose) {
-                    Image(systemName: "xmark.circle")
-                }
-                .buttonStyle(.borderless)
-                .help("关闭进程")
-            }
+            RowStopButton(help: "停止进程", isBusy: isTerminating, action: onClose)
         }
         .padding(.vertical, 4)
     }

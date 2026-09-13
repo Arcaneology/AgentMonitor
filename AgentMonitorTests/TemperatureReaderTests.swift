@@ -112,6 +112,99 @@ final class TemperatureReaderTests: XCTestCase {
         XCTAssertEqual(ranked[2].cpuPercent, 0, accuracy: 0.01)
     }
 
+    /// Every group is listed, not just the busiest few. The panel bounds the
+    /// rendered height instead of dropping rows.
+    func testRankedReturnsEveryGroupWithoutATopNTruncation() {
+        let now = Date(timeIntervalSince1970: 100)
+        let current = (1...12).map { index in
+            makeSnapshot(
+                pid: Int32(100 + index),
+                name: "app-\(index)",
+                cpuTime: Double(index),
+                memoryBytes: UInt64(index) * 1_024,
+                sampledAt: now
+            )
+        }
+
+        let ranked = HeavyProcessAggregator.ranked(
+            current: current,
+            previous: [:],
+            history: [:],
+            excludingPID: -1,
+            now: now
+        ).processes
+
+        XCTAssertEqual(ranked.count, current.count)
+        XCTAssertEqual(Set(ranked.map(\.name)).count, current.count)
+    }
+
+    /// User-owned processes are listed regardless of whether they run from a
+    /// system directory, an application bundle, or a user tooling path.
+    func testIncludesSystemProcesses() {
+        let now = Date(timeIntervalSince1970: 30)
+        let ranked = HeavyProcessAggregator.ranked(
+            current: [
+                makeSnapshot(
+                    pid: 11,
+                    name: "rapportd",
+                    executablePath: "/usr/libexec/rapportd",
+                    cpuTime: 9,
+                    memoryBytes: 9,
+                    sampledAt: now
+                ),
+                makeSnapshot(
+                    pid: 12,
+                    name: "ControlCenter",
+                    executablePath: "/System/Library/CoreServices/ControlCenter.app/Contents/MacOS/ControlCenter",
+                    cpuTime: 8,
+                    memoryBytes: 8,
+                    sampledAt: now
+                ),
+                makeSnapshot(
+                    pid: 13,
+                    name: "zsh",
+                    executablePath: "/bin/zsh",
+                    cpuTime: 7,
+                    memoryBytes: 7,
+                    sampledAt: now
+                ),
+                makeSnapshot(
+                    pid: 14,
+                    name: "AppleScript",
+                    executablePath: "/Library/Apple/System/Library/CoreServices/AppleScript.app",
+                    cpuTime: 6,
+                    memoryBytes: 6,
+                    sampledAt: now
+                ),
+                makeSnapshot(
+                    pid: 15,
+                    name: "node",
+                    executablePath: "/opt/homebrew/bin/node",
+                    cpuTime: 5,
+                    memoryBytes: 5,
+                    sampledAt: now
+                ),
+                makeSnapshot(
+                    pid: 16,
+                    name: "Safari",
+                    executablePath: "/Applications/Safari.app/Contents/MacOS/Safari",
+                    cpuTime: 4,
+                    memoryBytes: 4,
+                    sampledAt: now
+                )
+            ],
+            previous: [:],
+            history: [:],
+            excludingPID: -1,
+            now: now
+        ).processes
+
+        XCTAssertEqual(
+            ranked.map(\.name),
+            ["rapportd", "ControlCenter", "zsh", "AppleScript", "node", "Safari"]
+        )
+    }
+
     func testGroupsChromeHelpersAndAveragesCPUOver15Seconds() {
         XCTAssertEqual(
             HeavyProcessAggregator.applicationGroup(

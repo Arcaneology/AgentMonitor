@@ -13,7 +13,7 @@ Agent Monitor 是一个面向 macOS 14+ 的原生菜单栏应用，用于自动�
 - 普通进程先发送 `SIGTERM`，超时后才提供经二次确认的 `SIGKILL`；LaunchAgent 使用 `launchctl bootout`。
 - 停止前重新校验 UID、PID 和进程启动时间，避免 PID 复用导致误操作。
 
-应用只监控和操作当前登录用户的进程，不处理 root、其他用户或系统 daemon。未注册为用户 LaunchAgent、且只监听 Unix Domain Socket 的普通后台进程不会进入列表。停止一个进程会释放该进程拥有的全部端口，不能只关闭其中一个 socket。
+应用只监控和操作当前登录用户的进程，不处理 root、其他用户或系统 daemon。服务监测只列出本地项目与用户 LaunchAgent，无法归属到其中任一的监听端口不再展示；进程列表只包含应用进程，来自 `/System`、`/usr/libexec`、`/usr/bin` 等系统目录的进程会被过滤。未注册为用户 LaunchAgent、且只监听 Unix Domain Socket 的普通后台进程不会进入列表。停止一个进程会释放该进程拥有的全部端口，不能只关闭其中一个 socket。
 
 ## 本地构建
 
@@ -28,6 +28,8 @@ xcodebuild \
 ```
 
 也可以直接使用 Xcode 打开 `AgentMonitor.xcodeproj` 并运行 `AgentMonitor` scheme。`Release` 构建成功后会把 `AgentMonitor.app` 安装到 `/Applications`；Debug / 测试构建不会覆盖日常使用的应用。
+
+Debug 构建使用独立的 bundle identifier `com.lumos.AgentMonitor.Debug`，避免 Xcode 临时实例与 `/Applications` 中的 Release 应用共享 LaunchServices 和菜单栏状态记录；Release 仍使用 `com.lumos.AgentMonitor`。
 
 ## 测试
 

@@ -28,13 +28,23 @@ struct MenuBarContentView: View {
     @State private var isServiceMonitorExpanded: Bool
     private let temperatureStore: TemperatureStore?
     private let processStore: HeavyProcessStore?
-    @State private var monitorTab: MonitorTab = .ports
+    @State private var monitorTab: MonitorTab = .services
+
+    /// The panel stacks four module cards (power mode, token usage, temperature
+    /// and services). The viewport is sized so the stack is readable without
+    /// constant scrolling; the expanded service list adds one more card height.
+    private static let collapsedContentHeight: CGFloat = 960
+    private static let expandedContentHeight: CGFloat = 1200
 
     private enum MonitorTab: String, CaseIterable {
         case ports = "端口"
         case services = "服务"
         case processes = "进程"
     }
+
+    /// Tabs the panel offers. The port list keeps its view and data source but
+    /// is intentionally not reachable from the UI for now.
+    private static let visibleMonitorTabs: [MonitorTab] = [.services, .processes]
 
     init(
         store: MonitorStore,
@@ -166,7 +176,7 @@ struct MenuBarContentView: View {
             }
             .padding(12)
         }
-        .frame(height: isServiceMonitorExpanded ? 600 : 480)
+        .frame(height: isServiceMonitorExpanded ? Self.expandedContentHeight : Self.collapsedContentHeight)
     }
 
     private var initialLoading: some View {
@@ -196,40 +206,49 @@ struct MenuBarContentView: View {
 
     private var serviceMonitorSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.16)) {
-                    isServiceMonitorExpanded.toggle()
+            HStack(spacing: 8) {
+                Button {
+                    toggleServiceMonitor()
+                } label: {
+                    HStack(spacing: 8) {
+                        Label("服务监测", systemImage: "network")
+                            .font(.subheadline.weight(.semibold))
+
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(Rectangle())
                 }
-            } label: {
-                HStack(spacing: 10) {
-                    Label("服务监测", systemImage: "network")
-                        .font(.subheadline.weight(.semibold))
+                .buttonStyle(.plain)
+                .accessibilityLabel(isServiceMonitorExpanded ? "收起服务监测" : "展开服务监测")
 
-                    Spacer()
+                // The count badges double as the tab switcher; the port list is
+                // not offered here for now.
+                ForEach(Self.visibleMonitorTabs, id: \.self) { tab in
+                    ServiceSummaryBadge(
+                        title: tab.rawValue,
+                        value: monitorTabCount(tab),
+                        color: monitorTabTint(tab),
+                        isSelected: isServiceMonitorExpanded && monitorTab == tab
+                    ) {
+                        selectMonitorTab(tab)
+                    }
+                }
 
-                    ServiceSummaryBadge(title: "服务", value: store.serviceCount, color: .blue)
-                    ServiceSummaryBadge(title: "端口", value: store.portCount, color: .green)
-
+                Button {
+                    toggleServiceMonitor()
+                } label: {
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .rotationEffect(.degrees(isServiceMonitorExpanded ? 90 : 0))
                         .frame(width: 12, height: 12)
+                        .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .accessibilityLabel(isServiceMonitorExpanded ? "收起服务监测" : "展开服务监测")
             }
-            .buttonStyle(.plain)
 
             if isServiceMonitorExpanded {
-                Picker("监测内容", selection: $monitorTab) {
-                    ForEach(MonitorTab.allCases, id: \.self) { tab in
-                        Text(tab.rawValue).tag(tab)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .padding(.top, 10)
-
                 Group {
                     switch monitorTab {
                     case .ports:
@@ -250,6 +269,36 @@ struct MenuBarContentView: View {
             }
         }
         .monitorCard()
+    }
+
+    private func monitorTabCount(_ tab: MonitorTab) -> Int {
+        switch tab {
+        case .ports: store.portCount
+        case .services: store.serviceCount
+        case .processes: processStore?.processes.count ?? 0
+        }
+    }
+
+    private func monitorTabTint(_ tab: MonitorTab) -> Color {
+        switch tab {
+        case .ports, .processes: .green
+        case .services: .blue
+        }
+    }
+
+    private func toggleServiceMonitor() {
+        withAnimation(.easeInOut(duration: 0.16)) {
+            isServiceMonitorExpanded.toggle()
+        }
+    }
+
+    /// Selecting a tab also opens the section so a badge tap always has a
+    /// visible result.
+    private func selectMonitorTab(_ tab: MonitorTab) {
+        withAnimation(.easeInOut(duration: 0.16)) {
+            monitorTab = tab
+            isServiceMonitorExpanded = true
+        }
     }
 
     private var portMonitorDetails: some View {
@@ -631,6 +680,42 @@ struct MenuBarContentView: View {
         }
     }
 }
+/// One listening endpoint rendered as a capsule. TCP endpoints open in the
+/// default browser because a local TCP port is normally an HTTP service; UDP
+/// endpoints stay inert since a browser cannot talk to them.
+private struct EndpointBadge: View {
+    let endpoint: ListeningEndpoint
+
+    var body: some View {
+        if let url = endpoint.localServiceURL {
+            Button {
+                NSWorkspace.shared.open(url)
+            } label: {
+                HStack(spacing: 4) {
+                    label
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.caption2)
+                }
+            }
+            .buttonStyle(.plain)
+            .help(Text(verbatim: "在浏览器打开 \(url.absoluteString)"))
+            .accessibilityLabel("\(endpoint.transport.rawValue.uppercased()) 端口 \(endpoint.port)")
+            .accessibilityHint("点击在浏览器打开 \(url.absoluteString)")
+        } else {
+            label
+                .help(Text(verbatim: "\(endpoint.address):\(endpoint.port)"))
+        }
+    }
+
+    private var label: some View {
+        Text(verbatim: "\(endpoint.transport.rawValue.uppercased())  \(endpoint.port)")
+            .font(.caption2.monospacedDigit())
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(.quaternary.opacity(0.7), in: Capsule())
+            .contentShape(Capsule())
+    }
+}
 
 enum ServiceSortOrder: String, CaseIterable, Identifiable {
     case nameAscending
@@ -701,8 +786,24 @@ private struct ServiceSummaryBadge: View {
     let title: String
     let value: Int
     let color: Color
+    var isSelected = false
+    var action: (() -> Void)?
 
     var body: some View {
+        if let action {
+            Button(action: action) {
+                content
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(title) \(value)")
+            .accessibilityHint("点击切换到\(title)标签页")
+            .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        } else {
+            content
+        }
+    }
+
+    private var content: some View {
         HStack(spacing: 4) {
             Circle()
                 .fill(color)
@@ -711,12 +812,46 @@ private struct ServiceSummaryBadge: View {
                 .font(.caption2.weight(.semibold))
                 .monospacedDigit()
         }
-        .foregroundStyle(.secondary)
+        .foregroundStyle(isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
         .padding(.horizontal, 7)
         .padding(.vertical, 4)
-        .background(.quaternary.opacity(0.6), in: Capsule())
+        .background {
+            if isSelected {
+                Capsule().fill(color.opacity(0.22))
+            } else {
+                Capsule().fill(.quaternary.opacity(0.6))
+            }
+        }
+        .overlay {
+            Capsule().stroke(isSelected ? color.opacity(0.55) : .clear, lineWidth: 1)
+        }
+        .contentShape(Capsule())
     }
 }
+
+/// Row-level stop control shared by the service and process lists. Both send
+/// SIGTERM, so they use the same glyph, size and busy treatment; only the help
+/// text names the target.
+struct RowStopButton: View {
+
+    let help: String
+    let isBusy: Bool
+    let action: () -> Void
+
+    var body: some View {
+        if isBusy {
+            ProgressView()
+                .controlSize(.small)
+        } else {
+            Button(role: .destructive, action: action) {
+                Image(systemName: "stop.circle")
+            }
+            .buttonStyle(.borderless)
+            .help(help)
+        }
+    }
+}
+
 
 private struct ServiceRow: View {
     let service: MonitoredService
@@ -753,16 +888,7 @@ private struct ServiceRow: View {
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
 
-                    if isStopping {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Button(role: .destructive, action: onStop) {
-                            Image(systemName: "stop.circle")
-                        }
-                        .buttonStyle(.borderless)
-                        .help("停止服务")
-                    }
+                    RowStopButton(help: "停止服务", isBusy: isStopping, action: onStop)
                 }
             }
 
@@ -777,12 +903,7 @@ private struct ServiceRow: View {
                     spacing: 6
                 ) {
                     ForEach(service.endpoints, id: \.self) { endpoint in
-                        Text(verbatim: "\(endpoint.transport.rawValue.uppercased())  \(endpoint.port)")
-                            .font(.caption2.monospacedDigit())
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 4)
-                            .background(.quaternary.opacity(0.7), in: Capsule())
-                            .help(Text(verbatim: "\(endpoint.address):\(endpoint.port)"))
+                        EndpointBadge(endpoint: endpoint)
                     }
                 }
             }

@@ -19,39 +19,7 @@ struct TokenUsageChartView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                Label("Token 用量", systemImage: "chart.bar.fill")
-                    .font(.subheadline.weight(.semibold))
-
-                Spacer()
-
-                if let snapshot = displayedSnapshot {
-                    Text(TokenCountFormatter.compact(snapshot.totalTokens))
-                        .font(.system(.title3, design: .rounded, weight: .bold))
-                        .monospacedDigit()
-                        .accessibilityLabel("当前筛选合计 \(TokenCountFormatter.precise(snapshot.totalTokens)) Tokens")
-                }
-
-                if store.supportsCCSwitchSync {
-                    Button {
-                        Task { await store.syncFromCCSwitch(range: range) }
-                    } label: {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(store.isSyncing)
-                    .help("用 CC Switch 校准一次，只补本地没有的记录")
-                    .accessibilityLabel("校准 Token 数据")
-                }
-            }
-
-            Picker("时间范围", selection: $range) {
-                ForEach(TokenUsageRange.allCases) { range in
-                    Text(range.title).tag(range)
-                }
-            }
-            .pickerStyle(.segmented)
-
+            header
             modelSelector(snapshot: store.snapshot)
 
             chartContent
@@ -61,9 +29,11 @@ struct TokenUsageChartView: View {
             scanDiagnosticsStatus
         }
         .monitorCard()
+        // Display refresh: only re-queries stored records, so switching the
+        // time range renders immediately.
         .task(id: range) {
             while !Task.isCancelled {
-                await store.refresh(range: range)
+                await store.reload(range: range)
                 do {
                     try await Task.sleep(for: .seconds(30))
                 } catch {
@@ -71,6 +41,66 @@ struct TokenUsageChartView: View {
                 }
             }
         }
+        // Ingestion runs on its own slow schedule and never blocks the range
+        // switch. It lives with the panel, so closing the panel stops it.
+        .task {
+            while !Task.isCancelled {
+                await store.ingestSessionLogs()
+                do {
+                    try await Task.sleep(for: .seconds(60))
+                } catch {
+                    return
+                }
+            }
+        }
+    }
+
+    /// Title, one-shot CC Switch calibration and the time-range switch share
+    /// one row so the controls sit at the top of the card instead of taking a
+    /// full-width row above the chart.
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Label("Token 用量", systemImage: "chart.bar.fill")
+                .font(.subheadline.weight(.semibold))
+
+            if store.supportsCCSwitchSync {
+                Button {
+                    Task { await store.syncFromCCSwitch(range: range) }
+                } label: {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.subheadline)
+                }
+                .buttonStyle(.borderless)
+                .disabled(store.isSyncing)
+                .accessibilityLabel("校准 Token 数据")
+            }
+
+            Spacer(minLength: 6)
+
+            timeRangePicker
+
+            if let snapshot = displayedSnapshot {
+                Text(TokenCountFormatter.compact(snapshot.totalTokens))
+                    .font(.system(.title3, design: .rounded, weight: .bold))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                    .accessibilityLabel("当前筛选合计 \(TokenCountFormatter.precise(snapshot.totalTokens)) Tokens")
+            }
+        }
+    }
+
+    private var timeRangePicker: some View {
+        Picker("时间范围", selection: $range) {
+            ForEach(TokenUsageRange.allCases) { range in
+                Text(range.title).tag(range)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .controlSize(.small)
+        .fixedSize()
+        .accessibilityLabel("时间范围")
     }
 
     private var displayedSnapshot: TokenUsageSnapshot? {
@@ -146,38 +176,20 @@ struct TokenUsageChartView: View {
         }
     }
 
+    /// Family chips and model chips are the same kind of control: both toggle
+    /// their filter, and a second click on the selected chip returns to the
+    /// full overview.
     @ViewBuilder
     private func modelSelector(snapshot: TokenUsageSnapshot?) -> some View {
-        let modelIDs = modelIDs(for: snapshot)
+        let families = familyFilters(for: snapshot)
         let legendModelIDs = legendModelIDs(for: snapshot)
-        let families = modelFamilies(for: modelIDs)
 
         VStack(alignment: .leading, spacing: 5) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Menu {
-                    ForEach(families, id: \.self) { family in
-                        Button {
-                            filter = TokenUsageFilter.toggling(family, current: filter)
-                        } label: {
-                            Label(
-                                family.title,
-                                systemImage: selectedFamily == family ? "checkmark" : "circle"
-                            )
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "square.stack.3d.up")
-                        Text(selectedFamily?.title ?? "模型系列")
-                            .lineLimit(1)
-                        Image(systemName: "chevron.down")
-                            .font(.caption2.weight(.semibold))
-                    }
-                }
-                .menuStyle(.borderlessButton)
-                .accessibilityLabel(selectedFamily.map { "模型系列，当前 \($0.title)" } ?? "模型系列，当前未筛选")
-
-                Spacer(minLength: 0)
+            TokenFamilyLegend(
+                families: families,
+                selectedFamily: selectedFamily
+            ) { family in
+                filter = TokenUsageFilter.toggling(family, current: filter)
             }
 
             TokenModelLegend(
@@ -189,50 +201,19 @@ struct TokenUsageChartView: View {
         }
     }
 
-    private func modelFamilies(for modelIDs: [String]) -> [TokenModelFamily] {
-        var families = Set(modelIDs.map(TokenModelCatalog.family))
-        families.remove(.unknown)
-        return families.sorted { familySortIndex($0) < familySortIndex($1) }
-    }
-
-    private func modelIDs(for snapshot: TokenUsageSnapshot?) -> [String] {
-        let observed = snapshot?.modelIDs ?? []
-        var all = Set(TokenModelCatalog.knownModelIDs)
-        all.formUnion(observed.map(TokenModelCatalog.canonicalID))
-        if let selectedModelID {
-            all.insert(TokenModelCatalog.canonicalID(selectedModelID))
-        }
-        return all.sorted(by: modelSort)
+    private func familyFilters(for snapshot: TokenUsageSnapshot?) -> [TokenModelFamily] {
+        TokenModelCatalog.familyOptions(
+            observedModelIDs: snapshot?.modelIDs ?? [],
+            selectedFamily: selectedFamily
+        )
     }
 
     private func legendModelIDs(for snapshot: TokenUsageSnapshot?) -> [String] {
-        var observed = Set((snapshot?.modelIDs ?? []).map(TokenModelCatalog.canonicalID))
-        if let selectedModelID {
-            observed.insert(TokenModelCatalog.canonicalID(selectedModelID))
-        }
-        return observed.sorted(by: modelSort)
-    }
-
-    private func modelSort(_ lhs: String, _ rhs: String) -> Bool {
-        let left = TokenModelCatalog.metadata(for: lhs)
-        let right = TokenModelCatalog.metadata(for: rhs)
-        if left.family != right.family {
-            return familySortIndex(left.family) < familySortIndex(right.family)
-        }
-        if left.rank != right.rank { return left.rank > right.rank }
-        return left.name.localizedStandardCompare(right.name) == .orderedAscending
-    }
-
-    private func familySortIndex(_ family: TokenModelFamily) -> Int {
-        switch family {
-        case .gpt: 0
-        case .claude: 1
-        case .gemini: 2
-        case .grok: 3
-        case .kimi: 4
-        case .deepSeek: 5
-        case .unknown: 6
-        }
+        TokenModelCatalog.modelOptions(
+            observedModelIDs: snapshot?.modelIDs ?? [],
+            selectedModelID: selectedModelID,
+            selectedFamily: selectedFamily
+        )
     }
 
     @ViewBuilder
@@ -287,7 +268,7 @@ struct TokenUsageChartView: View {
             // synthetic unknown segment keeps their aggregate visible.
             return snapshot.totalTokens > 0 ? ["unknown"] : []
         }
-        return Array(observed).sorted(by: modelSort)
+        return TokenModelCatalog.sortedModelIDs(observed)
     }
 
     private func chartAccessibilityLabel(for snapshot: TokenUsageSnapshot) -> String {
@@ -713,6 +694,38 @@ struct TokenUsageChartView: View {
     }
 }
 
+/// Family row of the model filter. It intentionally mirrors the model chips so
+/// both levels of the filter read as one control group.
+private struct TokenFamilyLegend: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let families: [TokenModelFamily]
+    let selectedFamily: TokenModelFamily?
+    let onSelect: (TokenModelFamily) -> Void
+
+    var body: some View {
+        TokenModelFlowLayout(horizontalSpacing: 8, verticalSpacing: 5) {
+            Image(systemName: "square.stack.3d.up")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
+
+            ForEach(families, id: \.self) { family in
+                TokenModelLegendButton(
+                    title: family.title,
+                    color: TokenModelPalette.color(forFamily: family, scheme: colorScheme),
+                    isSelected: selectedFamily == family
+                ) {
+                    onSelect(family)
+                }
+                .accessibilityLabel("模型系列 \(family.title)")
+            }
+        }
+        .padding(.vertical, 1)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("模型系列")
+    }
+}
+
 private struct TokenModelLegend: View {
     @Environment(\.colorScheme) private var colorScheme
     let modelIDs: [String]
@@ -844,6 +857,20 @@ private struct TokenModelFlowLayout: Layout {
 }
 
 private enum TokenModelPalette {
+    /// Family chips reuse the family hue at the depth of its strongest model,
+    /// so a family chip matches the deepest chip in its own model row.
+    static func color(forFamily family: TokenModelFamily, scheme: ColorScheme) -> Color {
+        let representative = TokenModelCatalog.allModelIDs
+            .filter { TokenModelCatalog.family(for: $0) == family }
+            .max { lhs, rhs in
+                TokenModelCatalog.metadata(for: lhs).rank < TokenModelCatalog.metadata(for: rhs).rank
+            }
+        guard let representative else {
+            return Color(white: scheme == .dark ? 0.70 : 0.48)
+        }
+        return color(for: representative, scheme: scheme)
+    }
+
     static func color(for modelID: String, scheme: ColorScheme) -> Color {
         let metadata = TokenModelCatalog.metadata(for: modelID)
         let hue: Double
@@ -983,15 +1010,12 @@ struct TokenUsageModelRange: Equatable, Sendable {
 }
 
 enum TokenCountFormatter {
+    /// Panel totals always use 亿 so the same number means the same thing in
+    /// every range. Values below 万 keep plain digits because 亿 would round
+    /// them all to "0.00亿".
     static func compact(_ value: Int64) -> String {
-        switch value {
-        case 100_000_000...:
-            format(value, divisor: 100_000_000, suffix: "亿")
-        case 10_000...:
-            format(value, divisor: 10_000, suffix: "万")
-        default:
-            String(value)
-        }
+        guard value >= 10_000 else { return String(value) }
+        return format(value, divisor: 100_000_000, suffix: "亿")
     }
 
     /// Full precision for tooltips, with grouping but without rounding to 亿/万.

@@ -11,6 +11,7 @@ struct AgentMonitorApp: App {
     @StateObject private var tokenUsageStore: TokenUsageStore
 
     init() {
+        NSApplication.shared.setActivationPolicy(.regular)
         let dependencies = AppDependencies.make()
         _store = StateObject(wrappedValue: dependencies.store)
         _temperatureStore = StateObject(wrappedValue: dependencies.temperatureStore)
@@ -34,6 +35,19 @@ struct AgentMonitorApp: App {
     }
 
     var body: some Scene {
+        Window("Agent Monitor", id: "monitor") {
+            ScrollView {
+                MenuBarContentView(
+                    store: store,
+                    tokenUsageStore: tokenUsageStore,
+                    temperatureStore: temperatureStore,
+                    processStore: heavyProcessStore
+                )
+            }
+            .frame(width: 420)
+        }
+        .defaultSize(width: 420, height: 760)
+
         MenuBarExtra {
             MenuBarContentView(
                 store: store,

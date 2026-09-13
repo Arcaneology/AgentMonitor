@@ -306,6 +306,13 @@ protocol TokenUsageReading: Sendable {
 }
 
 actor TokenUsageDatabase: TokenUsageReading {
+
+/// Carries the database's FileManager into a detached scan. FileManager is
+/// safe for concurrent reads of distinct paths, which is all the scanner does.
+private struct UncheckedFileManager: @unchecked Sendable {
+    let value: FileManager
+}
+
     private static let currentSchemaVersion: Int32 = 5
 
     private let databaseURL: URL
@@ -414,16 +421,24 @@ actor TokenUsageDatabase: TokenUsageReading {
     }
 
     @discardableResult
-    func syncFromSessionLogs(now: Date = Date()) throws -> Int {
+    func syncFromSessionLogs(now: Date = Date()) async throws -> Int {
         try ensureLocalDatabase()
         let persistedDiagnostics = try loadScanDiagnostics()
         let cursors = try sessionLogCursors()
-        let scan = SessionUsageScanner.scan(
-            roots: sessionRoots,
-            fileManager: fileManager,
-            existingCursors: cursors,
-            now: Int64(now.timeIntervalSince1970)
-        )
+        // Reading the session logs is by far the most expensive step (a large,
+        // actively written rollout is re-read in full). Run it off the actor so
+        // queries issued while a scan is in flight — for example switching the
+        // chart's time range — are still answered immediately.
+        let roots = sessionRoots
+        let scanFileManager = UncheckedFileManager(value: fileManager)
+        let scan = await Task.detached(priority: .utility) {
+            SessionUsageScanner.scan(
+                roots: roots,
+                fileManager: scanFileManager.value,
+                existingCursors: cursors,
+                now: Int64(now.timeIntervalSince1970)
+            )
+        }.value
         // A scanner may report parser diagnostics against the symlink-resolved
         // source path while its cursor keeps the path used to discover the
         // file.  Compare canonical paths here so a successful rescan clears
@@ -1777,10 +1792,16 @@ final class TokenUsageStore: ObservableObject {
     @Published private(set) var scanDiagnostics: [SessionScanDiagnostic] = []
     @Published private(set) var isRefreshing = false
     @Published private(set) var isSyncing = false
+    @Published private(set) var isIngesting = false
 
     private let reader: any TokenUsageReading
     private let calendar: Calendar
     private var requestID = 0
+    private var lastIngestAt: Date?
+    /// Session-log ingestion is deliberately far slower than the display
+    /// refresh: a growing multi-hundred-megabyte rollout has to be re-read in
+    /// full every time it changes.
+    static let ingestInterval: TimeInterval = 300
     let supportsCCSwitchSync: Bool
 
     init(
@@ -1792,7 +1813,18 @@ final class TokenUsageStore: ObservableObject {
         self.supportsCCSwitchSync = reader is TokenUsageDatabase
     }
 
+    /// Ingests session logs and then re-queries. Kept for callers that must
+    /// observe newly written log lines before they return (tests, the audit
+    /// script and the one-shot CC Switch calibration).
     func refresh(range: TokenUsageRange, now: Date = Date()) async {
+        await ingestSessionLogs(now: now, force: true)
+        await reload(range: range, now: now)
+    }
+
+    /// Queries and aggregates the stored records only. This is the path the
+    /// panel uses, so switching the time range never waits for the session-log
+    /// scan — a large rollout can take minutes to re-read.
+    func reload(range: TokenUsageRange, now: Date = Date()) async {
         requestID += 1
         let currentRequestID = requestID
         isRefreshing = true
@@ -1805,10 +1837,6 @@ final class TokenUsageStore: ObservableObject {
 
         let window = range.window(now: now, calendar: calendar)
         do {
-            if let database = reader as? TokenUsageDatabase {
-                _ = try await database.syncFromSessionLogs(now: now)
-                scanDiagnostics = await database.diagnostics()
-            }
             let records = try await reader.records(from: window.queryStart, through: now)
             guard currentRequestID == requestID else { return }
             snapshot = TokenUsageAggregator.aggregate(
@@ -1817,8 +1845,31 @@ final class TokenUsageStore: ObservableObject {
                 now: now,
                 calendar: calendar
             )
+            if let database = reader as? TokenUsageDatabase {
+                scanDiagnostics = await database.diagnostics()
+            }
         } catch {
             guard currentRequestID == requestID else { return }
+            errorDescription = (error as? LocalizedError)?.errorDescription ?? "无法读取 Token 用量"
+        }
+    }
+
+    /// Scans the session logs at most once per ingestInterval. Scanning is the
+    /// expensive half of a refresh, so the panel drives it on its own slow
+    /// schedule instead of on every display update.
+    func ingestSessionLogs(now: Date = Date(), force: Bool = false) async {
+        guard let database = reader as? TokenUsageDatabase else { return }
+        guard !isIngesting else { return }
+        if !force, let lastIngestAt, now.timeIntervalSince(lastIngestAt) < Self.ingestInterval {
+            return
+        }
+        isIngesting = true
+        defer { isIngesting = false }
+        do {
+            _ = try await database.syncFromSessionLogs(now: now)
+            lastIngestAt = now
+            scanDiagnostics = await database.diagnostics()
+        } catch {
             errorDescription = (error as? LocalizedError)?.errorDescription ?? "无法读取 Token 用量"
         }
     }

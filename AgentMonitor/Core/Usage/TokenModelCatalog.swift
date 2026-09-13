@@ -315,3 +315,57 @@ enum TokenModelCatalog {
         }
     }
 }
+
+/// Pure selection logic behind the token card's two chip rows. Keeping it here
+/// lets the tested rules decide what the panel shows: a family row that only
+/// offers families with usage, and a model row that narrows to the selected
+/// family.
+extension TokenModelCatalog {
+    /// Families available in the current snapshot. The active filter stays
+    /// listed even when the selected range holds no data for it, so the filter
+    /// can always be cleared again.
+    static func familyOptions(
+        observedModelIDs: [String],
+        selectedFamily: TokenModelFamily?
+    ) -> [TokenModelFamily] {
+        var families = Set(observedModelIDs.map { family(for: $0) })
+        if let selectedFamily {
+            families.insert(selectedFamily)
+        }
+        families.remove(.unknown)
+        return families.sorted { familySortIndex($0) < familySortIndex($1) }
+    }
+
+    /// Models shown under the family row: every observed model without a
+    /// family filter, otherwise only that family's models. An explicitly
+    /// selected model stays listed so it can be deselected.
+    static func modelOptions(
+        observedModelIDs: [String],
+        selectedModelID: String?,
+        selectedFamily: TokenModelFamily?
+    ) -> [String] {
+        var models = Set(observedModelIDs.map { canonicalID($0) })
+        if let selectedFamily {
+            models = models.filter { family(for: $0) == selectedFamily }
+        }
+        // Inserted after the family filter so a selected model is never hidden
+        // by the row it has to be deselectable from.
+        if let selectedModelID {
+            models.insert(canonicalID(selectedModelID))
+        }
+        return sortedModelIDs(models)
+    }
+
+    /// Stable display order: family, then catalog strength, then name.
+    static func sortedModelIDs<S: Sequence>(_ modelIDs: S) -> [String] where S.Element == String {
+        modelIDs.sorted { lhs, rhs in
+            let left = metadata(for: lhs)
+            let right = metadata(for: rhs)
+            if left.family != right.family {
+                return familySortIndex(left.family) < familySortIndex(right.family)
+            }
+            if left.rank != right.rank { return left.rank > right.rank }
+            return left.name.localizedStandardCompare(right.name) == .orderedAscending
+        }
+    }
+}
