@@ -8,6 +8,7 @@ struct TokenUsageChartView: View {
     @Binding var range: TokenUsageRange
     @State private var hoverState: TokenUsageHoverState?
     @State private var filter: TokenUsageFilter?
+    @State private var isExpanded = true
     @Environment(\.colorScheme) private var colorScheme
 
     private static let unit: Int64 = 100_000_000
@@ -20,13 +21,16 @@ struct TokenUsageChartView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
-            modelSelector(snapshot: store.snapshot)
 
-            chartContent
-                .frame(height: 176)
+            if isExpanded {
+                modelSelector(snapshot: store.snapshot)
 
-            reviewStatus(snapshot: displayedSnapshot)
-            scanDiagnosticsStatus
+                chartContent
+                    .frame(height: 176)
+
+                reviewStatus(snapshot: displayedSnapshot)
+                scanDiagnosticsStatus
+            }
         }
         .monitorCard()
         // Display refresh: only re-queries stored records, so switching the
@@ -60,8 +64,7 @@ struct TokenUsageChartView: View {
     /// full-width row above the chart.
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Label("Token 用量", systemImage: "chart.bar.fill")
-                .font(.subheadline.weight(.semibold))
+            ModuleTitleToggle(isExpanded: $isExpanded, title: "Token 用量", systemImage: "chart.bar.fill")
 
             if store.supportsCCSwitchSync {
                 Button {
@@ -87,6 +90,8 @@ struct TokenUsageChartView: View {
                     .layoutPriority(1)
                     .accessibilityLabel("当前筛选合计 \(TokenCountFormatter.precise(snapshot.totalTokens)) Tokens")
             }
+
+            ModuleCollapseButton(isExpanded: $isExpanded, title: "Token 用量")
         }
     }
 

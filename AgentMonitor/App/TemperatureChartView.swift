@@ -32,19 +32,22 @@ struct TemperatureMonitorSection: View {
     /// setting, so restoring the switch needs no other change.
     private static let showsHighTemperatureAlertControls = false
 
+    @State private var isExpanded = true
+
     var body: some View {
         VStack(spacing: 10) {
             header
-            TemperatureChartView(store: temperatureStore)
+            if isExpanded {
+                TemperatureChartView(store: temperatureStore)
+            }
         }
         .monitorCard()
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label("温度监测", systemImage: "thermometer.medium")
-                    .font(.subheadline.weight(.semibold))
+            HStack(spacing: 8) {
+                ModuleTitleToggle(isExpanded: $isExpanded, title: "温度监测", systemImage: "thermometer.medium")
 
                 Spacer()
 
@@ -64,9 +67,11 @@ struct TemperatureMonitorSection: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+
+                ModuleCollapseButton(isExpanded: $isExpanded, title: "温度监测")
             }
 
-            if Self.showsHighTemperatureAlertControls {
+            if isExpanded && Self.showsHighTemperatureAlertControls {
                 Toggle("高温提示", isOn: $temperatureStore.isHighTemperatureAlertEnabled)
                     .toggleStyle(.switch)
                     .controlSize(.small)

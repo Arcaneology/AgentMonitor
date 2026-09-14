@@ -68,16 +68,26 @@ final class MonitorStoreTests: XCTestCase {
         let store = MonitorStore(discoverer: StaticDiscoverer(snapshot: snapshot))
         await store.refresh()
 
-        let hostingView = NSHostingView(rootView: MenuBarContentView(
+        let collapsedView = NSHostingView(rootView: MenuBarContentView(
+            store: store,
+            tokenUsageStore: makeTokenUsageStore()
+        ))
+        let expandedView = NSHostingView(rootView: MenuBarContentView(
             store: store,
             tokenUsageStore: makeTokenUsageStore(),
             isServiceMonitorExpanded: true
         ))
-        hostingView.layoutSubtreeIfNeeded()
+        collapsedView.layoutSubtreeIfNeeded()
+        expandedView.layoutSubtreeIfNeeded()
 
-        let height = hostingView.fittingSize.height
-        // The panel viewport is 1200pt while the service list is expanded.
-        XCTAssertGreaterThanOrEqual(height, 1200, "Menu fitting height was \(height)")
+        let collapsedHeight = collapsedView.fittingSize.height
+        let expandedHeight = expandedView.fittingSize.height
+        // Expanding reveals the service row, so the viewport grows with it.
+        XCTAssertGreaterThan(
+            expandedHeight,
+            collapsedHeight + 60,
+            "Collapsed \(collapsedHeight), expanded \(expandedHeight)"
+        )
     }
 
     func testMenuContentCollapsesServiceRowsByDefault() async {
@@ -105,8 +115,10 @@ final class MonitorStoreTests: XCTestCase {
 
         let collapsedHeight = collapsedView.fittingSize.height
         let expandedHeight = expandedView.fittingSize.height
-        XCTAssertGreaterThanOrEqual(collapsedHeight, 960, "Menu fitting height was \(collapsedHeight)")
-        XCTAssertEqual(expandedHeight - collapsedHeight, 240, accuracy: 1)
+        // The viewport fits short content instead of padding it to the
+        // 960pt cap, and the service rows stay hidden until expanded.
+        XCTAssertLessThan(collapsedHeight, 960, "Menu fitting height was \(collapsedHeight)")
+        XCTAssertLessThan(collapsedHeight, expandedHeight)
     }
 
     func testStopConfirmationIsRenderedInsideMenuContent() async {

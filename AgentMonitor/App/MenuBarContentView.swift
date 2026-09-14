@@ -17,6 +17,51 @@ extension View {
     }
 }
 
+/// Trailing chevron shared by every module card. A collapsed card keeps only
+/// its first row: the title, key figure and switch controls.
+struct ModuleCollapseButton: View {
+    @Binding var isExpanded: Bool
+    let title: String
+
+    var body: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.16)) {
+                isExpanded.toggle()
+            }
+        } label: {
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                .frame(width: 12, height: 12)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isExpanded ? "收起\(title)" : "展开\(title)")
+    }
+}
+
+/// Card title that folds the card when clicked, matching the chevron.
+struct ModuleTitleToggle: View {
+    @Binding var isExpanded: Bool
+    let title: String
+    let systemImage: String
+
+    var body: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.16)) {
+                isExpanded.toggle()
+            }
+        } label: {
+            Label(title, systemImage: systemImage)
+                .font(.subheadline.weight(.semibold))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isExpanded ? "收起\(title)" : "展开\(title)")
+    }
+}
+
 @MainActor
 struct MenuBarContentView: View {
     @ObservedObject var store: MonitorStore
@@ -26,6 +71,8 @@ struct MenuBarContentView: View {
     @State private var sortOrder: ServiceSortOrder = .nameAscending
     @State private var tokenUsageRange: TokenUsageRange = .today
     @State private var isServiceMonitorExpanded: Bool
+    @State private var isPowerModeExpanded = true
+    @State private var measuredContentHeight: CGFloat?
     private let temperatureStore: TemperatureStore?
     private let processStore: HeavyProcessStore?
     @State private var monitorTab: MonitorTab = .services
@@ -33,6 +80,7 @@ struct MenuBarContentView: View {
     /// The panel stacks four module cards (power mode, token usage, temperature
     /// and services). The viewport is sized so the stack is readable without
     /// constant scrolling; the expanded service list adds one more card height.
+    /// Both values are caps: folded cards shrink the viewport to fit.
     private static let collapsedContentHeight: CGFloat = 960
     private static let expandedContentHeight: CGFloat = 1200
 
@@ -100,15 +148,10 @@ struct MenuBarContentView: View {
     private var powerModeSection: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 10) {
-                Label("电源模式", systemImage: "powerplug")
-                    .font(.subheadline.weight(.semibold))
+                ModuleTitleToggle(isExpanded: $isPowerModeExpanded, title: "电源模式", systemImage: "powerplug")
 
                 Spacer()
 
-                if store.isChangingServerMode {
-                    ProgressView()
-                        .controlSize(.small)
-                }
                 Picker(
                     "电源模式",
                     selection: Binding(
@@ -126,8 +169,41 @@ struct MenuBarContentView: View {
                 .frame(width: 200)
                 .disabled(store.isChangingServerMode)
                 .help("切换电源模式")
+
+                powerModeStatusIndicator
+
+                ModuleCollapseButton(isExpanded: $isPowerModeExpanded, title: "电源模式")
             }
 
+            if isPowerModeExpanded {
+                powerModeDetails
+            }
+        }
+        .monitorCard()
+    }
+
+    /// Effective state rather than the picker selection: while a switch runs
+    /// it shows progress, and an unconfirmed state reads as unknown.
+    private var powerModeStatusIndicator: some View {
+        Group {
+            if store.isChangingServerMode {
+                ProgressView()
+                    .controlSize(.small)
+                    .scaleEffect(0.8)
+            } else {
+                Image(systemName: powerModeStatusIcon)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(powerModeStatusColor)
+            }
+        }
+        .frame(width: 18, height: 18)
+        .help(powerModeStatusHelp)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("当前电源状态：\(store.isChangingServerMode ? "切换中" : powerModeStatusText)")
+    }
+
+    private var powerModeDetails: some View {
+        VStack(alignment: .leading, spacing: 9) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text("定时")
@@ -161,7 +237,6 @@ struct MenuBarContentView: View {
                     .lineLimit(2)
             }
         }
-        .monitorCard()
     }
 
     private var content: some View {
@@ -175,8 +250,17 @@ struct MenuBarContentView: View {
                 serviceMonitorSection
             }
             .padding(12)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                measuredContentHeight = height
+            }
         }
-        .frame(height: isServiceMonitorExpanded ? Self.expandedContentHeight : Self.collapsedContentHeight)
+        .frame(height: contentViewportHeight)
+    }
+
+    private var contentViewportHeight: CGFloat {
+        let cap = isServiceMonitorExpanded ? Self.expandedContentHeight : Self.collapsedContentHeight
+        guard let measuredContentHeight, measuredContentHeight > 0 else { return cap }
+        return min(measuredContentHeight, cap)
     }
 
     private var initialLoading: some View {
@@ -234,18 +318,7 @@ struct MenuBarContentView: View {
                     }
                 }
 
-                Button {
-                    toggleServiceMonitor()
-                } label: {
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(isServiceMonitorExpanded ? 90 : 0))
-                        .frame(width: 12, height: 12)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(isServiceMonitorExpanded ? "收起服务监测" : "展开服务监测")
+                ModuleCollapseButton(isExpanded: $isServiceMonitorExpanded, title: "服务监测")
             }
 
             if isServiceMonitorExpanded {
@@ -550,6 +623,22 @@ struct MenuBarContentView: View {
         }
     }
 
+    private var powerModeStatusIcon: String {
+        switch store.serverModeSnapshot.effectiveMode {
+        case .server: "server.rack"
+        case .sleep: "moon.zzz.fill"
+        case .normal: "sun.max.fill"
+        case .unknown: "questionmark.circle.fill"
+        }
+    }
+
+    private var powerModeStatusHelp: String {
+        if store.isChangingServerMode { return "正在切换电源模式…" }
+        let status = "当前状态：\(powerModeStatusText)"
+        guard let message = store.serverModeSnapshot.message else { return status }
+        return "\(status)\n\(message)"
+    }
+
     private var nextPowerModeEventText: String {
         guard let event = store.serverModeSnapshot.schedule.nextEvent(after: Date(), calendar: .current) else {
             return "未开启"
@@ -682,7 +771,8 @@ struct MenuBarContentView: View {
 }
 /// One listening endpoint rendered as a capsule. TCP endpoints open in the
 /// default browser because a local TCP port is normally an HTTP service; UDP
-/// endpoints stay inert since a browser cannot talk to them.
+/// endpoints stay inert since a browser cannot talk to them. The capsule itself
+/// is the link, so it carries no extra link glyph.
 private struct EndpointBadge: View {
     let endpoint: ListeningEndpoint
 
@@ -691,11 +781,7 @@ private struct EndpointBadge: View {
             Button {
                 NSWorkspace.shared.open(url)
             } label: {
-                HStack(spacing: 4) {
-                    label
-                    Image(systemName: "arrow.up.right.square")
-                        .font(.caption2)
-                }
+                label
             }
             .buttonStyle(.plain)
             .help(Text(verbatim: "在浏览器打开 \(url.absoluteString)"))
