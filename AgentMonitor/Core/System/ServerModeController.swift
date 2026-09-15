@@ -85,6 +85,17 @@ struct PowerModeScheduleRule: Codable, Equatable, Sendable {
     var timeText: String {
         String(format: "%02d:%02d", hour, minute)
     }
+
+    static let dailyWeekdays: Set<Int> = Set(1...7)
+    static let workdayWeekdays: Set<Int> = Set(2...6)
+
+    var repeatsDaily: Bool {
+        weekdays == Self.dailyWeekdays
+    }
+
+    mutating func toggleRepeat() {
+        weekdays = repeatsDaily ? Self.workdayWeekdays : Self.dailyWeekdays
+    }
 }
 
 struct PowerModeSchedule: Codable, Equatable, Sendable {
@@ -97,7 +108,7 @@ struct PowerModeSchedule: Codable, Equatable, Sendable {
             mode: .sleep,
             hour: 2,
             minute: 0,
-            weekdays: Set(1...7),
+            weekdays: PowerModeScheduleRule.dailyWeekdays,
             isEnabled: false
         ),
         workdayServer: PowerModeScheduleRule(
@@ -105,7 +116,7 @@ struct PowerModeSchedule: Codable, Equatable, Sendable {
             mode: .server,
             hour: 8,
             minute: 0,
-            weekdays: Set(2...6),
+            weekdays: PowerModeScheduleRule.workdayWeekdays,
             isEnabled: false
         )
     )
@@ -248,7 +259,7 @@ final class ServerModeController: ServerModeControlling {
             do {
                 try ensureCaffeinateRunning()
             } catch {
-                caffeinateMessage = "caffeinate 启动失败：\(error.localizedDescription)"
+                caffeinateMessage = L("caffeinate 启动失败：\(error.localizedDescription)", "caffeinate failed to start: \(error.localizedDescription)")
             }
         } else if caffeinateManager.isRunning {
             caffeinateManager.stop()
@@ -297,7 +308,7 @@ final class ServerModeController: ServerModeControlling {
                 settingsStore.requestedMode = .normal
             }
             return ModeChangeResult(
-                snapshot: (await refresh()).withMessage("切换 \(mode.title) 失败：\(errorMessage(from: error))"),
+                snapshot: (await refresh()).withMessage(L("切换 \(mode.title) 失败：\(errorMessage(from: error))", "Failed to switch to \(mode.title): \(errorMessage(from: error))")),
                 succeeded: false
             )
         }
@@ -309,13 +320,13 @@ final class ServerModeController: ServerModeControlling {
 
         if mode == .server && !snapshot.isEnabled {
             return ModeChangeResult(
-                snapshot: snapshot.withMessage("pmset 已执行，但系统未进入 Server；已保留你的 Server 请求。"),
+                snapshot: snapshot.withMessage(L("pmset 已执行，但系统未进入 Server；已保留你的 Server 请求。", "pmset ran, but the system did not enter Server; your Server request is kept.")),
                 succeeded: false
             )
         }
         if mode != .server && snapshot.isEnabled {
             return ModeChangeResult(
-                snapshot: snapshot.withMessage("pmset 已执行，但系统仍处于 Server。"),
+                snapshot: snapshot.withMessage(L("pmset 已执行，但系统仍处于 Server。", "pmset ran, but the system is still in Server.")),
                 succeeded: false
             )
         }
@@ -341,7 +352,7 @@ final class ServerModeController: ServerModeControlling {
             return result.snapshot
         }
         settingsStore.lastAppliedScheduleEventID = event.id
-        return result.snapshot.withMessage("\(event.mode.title) 已按定时规则切换。")
+        return result.snapshot.withMessage(L("\(event.mode.title) 已按定时规则切换。", "Switched to \(event.mode.title) on schedule."))
     }
 
     private func ensureCaffeinateRunning() throws {
@@ -376,9 +387,9 @@ final class ServerModeController: ServerModeControlling {
     private func mismatchMessage(state: ServerModeState) -> String? {
         switch state {
         case .unknown:
-            return "无法确认 SleepDisabled 状态。"
+            return L("无法确认 SleepDisabled 状态。", "Unable to confirm the SleepDisabled state.")
         case .disabled where settingsStore.requestedMode == .server:
-            return "Server 请求仍在，但系统当前未启用 SleepDisabled。"
+            return L("Server 请求仍在，但系统当前未启用 SleepDisabled。", "Server is requested, but SleepDisabled is currently off.")
         case .enabled, .disabled:
             return nil
         }
@@ -552,9 +563,9 @@ private enum ServerModeError: Error {
     var message: String {
         switch self {
         case .commandFailed(let text):
-            return text.isEmpty ? "命令执行失败。" : text
+            return text.isEmpty ? L("命令执行失败。", "Command failed.") : text
         case .unsupportedUser(let user):
-            return "当前用户名不适合写入 sudoers：\(user)"
+            return L("当前用户名不适合写入 sudoers：\(user)", "The current user name cannot be written to sudoers: \(user)")
         }
     }
 }

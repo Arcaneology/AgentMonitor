@@ -37,7 +37,7 @@ struct ModuleCollapseButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(isExpanded ? "收起\(title)" : "展开\(title)")
+        .accessibilityLabel(isExpanded ? L("收起\(title)", "Collapse \(title)") : L("展开\(title)", "Expand \(title)"))
     }
 }
 
@@ -58,7 +58,7 @@ struct ModuleTitleToggle: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(isExpanded ? "收起\(title)" : "展开\(title)")
+        .accessibilityLabel(isExpanded ? L("收起\(title)", "Collapse \(title)") : L("展开\(title)", "Expand \(title)"))
     }
 }
 
@@ -76,6 +76,8 @@ struct MenuBarContentView: View {
     private let temperatureStore: TemperatureStore?
     private let processStore: HeavyProcessStore?
     @State private var monitorTab: MonitorTab = .services
+    @State private var isAboutPresented = false
+    @AppStorage(AppLanguage.storageKey) private var languageRawValue = AppLanguage.systemDefault.rawValue
 
     /// The panel stacks four module cards (power mode, token usage, temperature
     /// and services). The viewport is sized so the stack is readable without
@@ -88,6 +90,14 @@ struct MenuBarContentView: View {
         case ports = "端口"
         case services = "服务"
         case processes = "进程"
+
+        var title: String {
+            switch self {
+            case .ports: L("端口", "Ports")
+            case .services: L("服务", "Services")
+            case .processes: L("进程", "Processes")
+            }
+        }
     }
 
     /// Tabs the panel offers. The port list keeps its view and data source but
@@ -115,7 +125,10 @@ struct MenuBarContentView: View {
             header
             Divider()
 
+            // Strings are resolved when views are built, so a language switch
+            // rebuilds the module stack. Collapse state lives here and survives.
             content
+                .id(languageRawValue)
 
             if let serviceToStop {
                 Divider()
@@ -134,8 +147,15 @@ struct MenuBarContentView: View {
 
     private var header: some View {
         VStack(spacing: 12) {
-            HStack {
-                Label("Agent Monitor", systemImage: "antenna.radiowaves.left.and.right")
+            HStack(spacing: 7) {
+                Image("AppMark")
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFill()
+                    .frame(width: 20, height: 20)
+                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .accessibilityHidden(true)
+                Text(verbatim: "Agent Monitor")
                     .font(.headline)
 
                 Spacer()
@@ -148,12 +168,12 @@ struct MenuBarContentView: View {
     private var powerModeSection: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 10) {
-                ModuleTitleToggle(isExpanded: $isPowerModeExpanded, title: "电源模式", systemImage: "powerplug")
+                ModuleTitleToggle(isExpanded: $isPowerModeExpanded, title: L("电源模式", "Power Mode"), systemImage: "powerplug")
 
                 Spacer()
 
                 Picker(
-                    "电源模式",
+                    L("电源模式", "Power Mode"),
                     selection: Binding(
                         get: { store.serverModeSnapshot.displayedPowerMode },
                         set: { mode in store.selectPowerMode(mode) }
@@ -168,11 +188,11 @@ struct MenuBarContentView: View {
                 .controlSize(.small)
                 .frame(width: 200)
                 .disabled(store.isChangingServerMode)
-                .help("切换电源模式")
+                .help(L("切换电源模式", "Switch power mode"))
 
                 powerModeStatusIndicator
 
-                ModuleCollapseButton(isExpanded: $isPowerModeExpanded, title: "电源模式")
+                ModuleCollapseButton(isExpanded: $isPowerModeExpanded, title: L("电源模式", "Power Mode"))
             }
 
             if isPowerModeExpanded {
@@ -199,32 +219,24 @@ struct MenuBarContentView: View {
         .frame(width: 18, height: 18)
         .help(powerModeStatusHelp)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("当前电源状态：\(store.isChangingServerMode ? "切换中" : powerModeStatusText)")
+        .accessibilityLabel(L("当前电源状态：", "Current power state: ") + (store.isChangingServerMode ? L("切换中", "Switching") : powerModeStatusText))
     }
 
     private var powerModeDetails: some View {
         VStack(alignment: .leading, spacing: 9) {
             VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("定时")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text(nextPowerModeEventText)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
+                Text(L("定时", "Schedule"))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
 
                 powerModeScheduleRow(
                     rule: store.serverModeSnapshot.schedule.nightlySleep,
                     title: "Sleep",
-                    subtitle: "每天",
                     systemImage: "moon.zzz"
                 )
                 powerModeScheduleRow(
                     rule: store.serverModeSnapshot.schedule.workdayServer,
                     title: "Server",
-                    subtitle: "工作日",
                     systemImage: "server.rack"
                 )
             }
@@ -264,7 +276,7 @@ struct MenuBarContentView: View {
     }
 
     private var initialLoading: some View {
-        Text("正在扫描用户服务…")
+        Text(L("正在扫描用户服务…", "Scanning user services…"))
             .font(.caption)
             .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity, minHeight: 180)
@@ -275,9 +287,9 @@ struct MenuBarContentView: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.yellow)
             VStack(alignment: .leading, spacing: 2) {
-                Text("部分数据暂不可用")
+                Text(L("部分数据暂不可用", "Some data is unavailable"))
                     .font(.subheadline.weight(.semibold))
-                Text(store.snapshot.issues.map(issueDescription).joined(separator: "；"))
+                Text(store.snapshot.issues.map(issueDescription).joined(separator: L("；", "; ")))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -295,7 +307,7 @@ struct MenuBarContentView: View {
                     toggleServiceMonitor()
                 } label: {
                     HStack(spacing: 8) {
-                        Label("服务监测", systemImage: "network")
+                        Label(L("服务监测", "Services"), systemImage: "antenna.radiowaves.left.and.right")
                             .font(.subheadline.weight(.semibold))
 
                         Spacer(minLength: 0)
@@ -303,13 +315,13 @@ struct MenuBarContentView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(isServiceMonitorExpanded ? "收起服务监测" : "展开服务监测")
+                .accessibilityLabel(isServiceMonitorExpanded ? L("收起服务监测", "Collapse services") : L("展开服务监测", "Expand services"))
 
                 // The count badges double as the tab switcher; the port list is
                 // not offered here for now.
                 ForEach(Self.visibleMonitorTabs, id: \.self) { tab in
                     ServiceSummaryBadge(
-                        title: tab.rawValue,
+                        title: tab.title,
                         value: monitorTabCount(tab),
                         color: monitorTabTint(tab),
                         isSelected: isServiceMonitorExpanded && monitorTab == tab
@@ -318,7 +330,7 @@ struct MenuBarContentView: View {
                     }
                 }
 
-                ModuleCollapseButton(isExpanded: $isServiceMonitorExpanded, title: "服务监测")
+                ModuleCollapseButton(isExpanded: $isServiceMonitorExpanded, title: L("服务监测", "Services"))
             }
 
             if isServiceMonitorExpanded {
@@ -332,7 +344,7 @@ struct MenuBarContentView: View {
                         if let processStore {
                             HeavyProcessMonitorView(processStore: processStore)
                         } else {
-                            Text("暂无进程占用数据")
+                            Text(L("暂无进程占用数据", "No process usage data"))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -386,7 +398,7 @@ struct MenuBarContentView: View {
         return VStack(alignment: .leading, spacing: 8) {
             if !store.snapshot.issues.isEmpty { issueBanner }
             if entries.isEmpty {
-                Text(store.isRefreshing ? "正在扫描端口…" : "暂无监听端口")
+                Text(store.isRefreshing ? L("正在扫描端口…", "Scanning ports…") : L("暂无监听端口", "No listening ports"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 8)
@@ -426,9 +438,9 @@ struct MenuBarContentView: View {
             } else if store.services.isEmpty {
                 emptyState
             } else {
-                serviceSection(kind: .localProject, title: "本地项目")
-                serviceSection(kind: .launchAgent, title: "用户 Daemon")
-                serviceSection(kind: .userProcess, title: "其他用户端口")
+                serviceSection(kind: .localProject, title: L("本地项目", "Local Projects"))
+                serviceSection(kind: .launchAgent, title: L("用户 Daemon", "User Daemons"))
+                serviceSection(kind: .userProcess, title: L("其他用户端口", "Other User Ports"))
             }
         }
     }
@@ -491,28 +503,48 @@ struct MenuBarContentView: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .accessibilityLabel("排序方式：\(sortOrder.title)")
-        .help("排序服务")
+        .accessibilityLabel(L("排序方式：\(sortOrder.title)", "Sort order: \(sortOrder.title)"))
+        .help(L("排序服务", "Sort services"))
     }
 
     private var emptyState: some View {
         ContentUnavailableView(
-            "暂无用户服务",
+            L("暂无用户服务", "No user services"),
             systemImage: "network.slash",
-            description: Text("启动本地网页项目或用户 LaunchAgent 后，它会自动出现。")
+            description: Text(L(
+                "启动本地网页项目或用户 LaunchAgent 后，它会自动出现。",
+                "Start a local web project or a user LaunchAgent and it will appear here."
+            ))
         )
         .frame(maxWidth: .infinity, minHeight: 180)
     }
 
     private var footer: some View {
-        HStack {
-            Text(updatedText)
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+        HStack(spacing: 10) {
+            Button {
+                isAboutPresented.toggle()
+            } label: {
+                Label(L("关于", "About"), systemImage: "info.circle")
+            }
+            .buttonStyle(.borderless)
+            .popover(isPresented: $isAboutPresented, arrowEdge: .top) {
+                AboutView()
+            }
+
+            Picker(L("语言", "Language"), selection: $languageRawValue) {
+                ForEach(AppLanguage.allCases) { language in
+                    Text(verbatim: language.switchTitle).tag(language.rawValue)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.small)
+            .fixedSize()
+            .help(L("切换界面语言", "Switch interface language"))
 
             Spacer()
 
-            Button("退出") {
+            Button(L("退出", "Quit")) {
                 NSApplication.shared.terminate(nil)
             }
             .keyboardShortcut("q")
@@ -524,7 +556,7 @@ struct MenuBarContentView: View {
 
     private func stopConfirmation(for service: MonitoredService) -> some View {
         VStack(alignment: .leading, spacing: 9) {
-            Text("停止 \(service.displayName)？")
+            Text(L("停止 \(service.displayName)？", "Stop \(service.displayName)?"))
                 .font(.subheadline.weight(.semibold))
             Text(stopImpact(for: service))
                 .font(.caption)
@@ -532,12 +564,12 @@ struct MenuBarContentView: View {
 
             HStack {
                 Spacer()
-                Button("取消") {
+                Button(L("取消", "Cancel")) {
                     serviceToStop = nil
                 }
                 .buttonStyle(.bordered)
 
-                Button("停止", role: .destructive) {
+                Button(L("停止", "Stop"), role: .destructive) {
                     serviceToStop = nil
                     Task { await stop(service) }
                 }
@@ -554,20 +586,23 @@ struct MenuBarContentView: View {
         switch prompt {
         case .force(let service, let pids):
             VStack(alignment: .leading, spacing: 9) {
-                Text("服务仍在运行")
+                Text(L("服务仍在运行", "Service is still running"))
                     .font(.subheadline.weight(.semibold))
-                Text("PID \(pids.map(String.init).joined(separator: ", ")) 未响应 SIGTERM。强制结束可能导致未保存的数据丢失。")
+                Text(L(
+                    "PID \(pids.map(String.init).joined(separator: ", ")) 未响应 SIGTERM。强制结束可能导致未保存的数据丢失。",
+                    "PID \(pids.map(String.init).joined(separator: ", ")) did not respond to SIGTERM. Force quitting may lose unsaved data."
+                ))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
                 HStack {
                     Spacer()
-                    Button("取消") {
+                    Button(L("取消", "Cancel")) {
                         actionPrompt = nil
                     }
                     .buttonStyle(.bordered)
 
-                    Button("强制结束", role: .destructive) {
+                    Button(L("强制结束", "Force Quit"), role: .destructive) {
                         actionPrompt = nil
                         Task { await forceStop(service) }
                     }
@@ -583,14 +618,14 @@ struct MenuBarContentView: View {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.yellow)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("操作失败")
+                    Text(L("操作失败", "Action failed"))
                         .font(.subheadline.weight(.semibold))
                     Text(message)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button("好") {
+                Button(L("好", "OK")) {
                     actionPrompt = nil
                 }
                 .buttonStyle(.bordered)
@@ -600,18 +635,8 @@ struct MenuBarContentView: View {
         }
     }
 
-    private var updatedText: String {
-        guard store.snapshot.collectedAt != .distantPast else { return "尚未刷新" }
-        return "更新于 \(store.snapshot.collectedAt.formatted(date: .omitted, time: .standard))"
-    }
-
     private var powerModeStatusText: String {
-        switch store.serverModeSnapshot.effectiveMode {
-        case .server: "Server 生效"
-        case .sleep: "Sleep 待机"
-        case .normal: "Normal"
-        case .unknown: "未知"
-        }
+        store.serverModeSnapshot.effectiveMode.statusText
     }
 
     private var powerModeStatusColor: Color {
@@ -624,32 +649,19 @@ struct MenuBarContentView: View {
     }
 
     private var powerModeStatusIcon: String {
-        switch store.serverModeSnapshot.effectiveMode {
-        case .server: "server.rack"
-        case .sleep: "moon.zzz.fill"
-        case .normal: "sun.max.fill"
-        case .unknown: "questionmark.circle.fill"
-        }
+        store.serverModeSnapshot.effectiveMode.symbolName
     }
 
     private var powerModeStatusHelp: String {
-        if store.isChangingServerMode { return "正在切换电源模式…" }
-        let status = "当前状态：\(powerModeStatusText)"
+        if store.isChangingServerMode { return L("正在切换电源模式…", "Switching power mode…") }
+        let status = L("当前状态：\(powerModeStatusText)", "Current state: \(powerModeStatusText)")
         guard let message = store.serverModeSnapshot.message else { return status }
         return "\(status)\n\(message)"
-    }
-
-    private var nextPowerModeEventText: String {
-        guard let event = store.serverModeSnapshot.schedule.nextEvent(after: Date(), calendar: .current) else {
-            return "未开启"
-        }
-        return "\(event.mode.title) \(event.date.formatted(date: .omitted, time: .shortened))"
     }
 
     private func powerModeScheduleRow(
         rule: PowerModeScheduleRule,
         title: String,
-        subtitle: String,
         systemImage: String
     ) -> some View {
         HStack(spacing: 8) {
@@ -661,9 +673,20 @@ struct MenuBarContentView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .font(.caption.weight(.semibold))
-                Text(subtitle)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                Button {
+                    updateScheduleRepeat(rule.id)
+                } label: {
+                    Text(scheduleRepeatTitle(rule))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(.quaternary.opacity(0.75), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .help(L("点击切换每天 / 工作日", "Click to switch daily / weekdays"))
+                .accessibilityLabel(scheduleRepeatTitle(rule))
+                .accessibilityHint(L("点击在每天和工作日之间切换", "Click to switch between daily and weekdays"))
             }
 
             Spacer()
@@ -708,6 +731,16 @@ struct MenuBarContentView: View {
         }
     }
 
+    private func updateScheduleRepeat(_ id: PowerModeScheduleRuleID) {
+        updateScheduleRule(id) { rule in
+            rule.toggleRepeat()
+        }
+    }
+
+    private func scheduleRepeatTitle(_ rule: PowerModeScheduleRule) -> String {
+        rule.repeatsDaily ? L("每天", "Daily") : L("工作日", "Weekdays")
+    }
+
     private func updateScheduleTime(_ id: PowerModeScheduleRuleID, date: Date) {
         let components = Calendar.current.dateComponents([.hour, .minute], from: date)
         updateScheduleRule(id) { rule in
@@ -733,21 +766,21 @@ struct MenuBarContentView: View {
 
     private func issueDescription(_ issue: MonitorIssue) -> String {
         switch issue.source {
-        case .ports: "端口扫描失败"
-        case .launchAgents: "LaunchAgent 扫描失败"
+        case .ports: L("端口扫描失败", "Port scan failed")
+        case .launchAgents: L("LaunchAgent 扫描失败", "LaunchAgent scan failed")
         }
     }
 
     private func stopImpact(for service: MonitoredService) -> String {
         let processText = service.processes.count == 1
             ? "PID \(service.processes[0].id.pid)"
-            : "\(service.processes.count) 个进程"
+            : L("\(service.processes.count) 个进程", "\(service.processes.count) processes")
         guard !service.endpoints.isEmpty else {
-            return "将停止 \(processText)。该服务目前没有监听端口。"
+            return L("将停止 \(processText)。该服务目前没有监听端口。", "Will stop \(processText). This service has no listening ports.")
         }
 
         let ports = service.endpoints.map { String($0.port) }.joined(separator: ", ")
-        return "将停止 \(processText)，并释放端口：\(ports)。"
+        return L("将停止 \(processText)，并释放端口：\(ports)。", "Will stop \(processText) and free ports: \(ports).")
     }
 
     private func stop(_ service: MonitoredService) async {
@@ -769,6 +802,38 @@ struct MenuBarContentView: View {
         }
     }
 }
+/// Effective power state shared by the panel indicator and the menu bar item.
+extension PowerModeStatus {
+    var symbolName: String {
+        switch self {
+        case .server: "server.rack"
+        case .sleep: "moon.zzz.fill"
+        case .normal: "laptopcomputer"
+        case .unknown: "questionmark.circle.fill"
+        }
+    }
+
+    var statusText: String {
+        switch self {
+        case .server: L("Server 生效", "Server active")
+        case .sleep: L("Sleep 待机", "Sleeping")
+        case .normal: "Normal"
+        case .unknown: L("未知", "Unknown")
+        }
+    }
+}
+
+/// Menu bar glyph to the left of the temperature: the effective power mode.
+struct PowerModeMenuBarIcon: View {
+    @ObservedObject var store: MonitorStore
+
+    var body: some View {
+        let status = store.serverModeSnapshot.effectiveMode
+        Image(systemName: store.isChangingServerMode ? "arrow.triangle.2.circlepath" : status.symbolName)
+            .accessibilityLabel(L("电源模式：", "Power mode: ") + status.statusText)
+    }
+}
+
 /// One listening endpoint rendered as a capsule. TCP endpoints open in the
 /// default browser because a local TCP port is normally an HTTP service; UDP
 /// endpoints stay inert since a browser cannot talk to them. The capsule itself
@@ -784,9 +849,9 @@ private struct EndpointBadge: View {
                 label
             }
             .buttonStyle(.plain)
-            .help(Text(verbatim: "在浏览器打开 \(url.absoluteString)"))
-            .accessibilityLabel("\(endpoint.transport.rawValue.uppercased()) 端口 \(endpoint.port)")
-            .accessibilityHint("点击在浏览器打开 \(url.absoluteString)")
+            .help(Text(verbatim: L("在浏览器打开 \(url.absoluteString)", "Open \(url.absoluteString) in browser")))
+            .accessibilityLabel(L("\(endpoint.transport.rawValue.uppercased()) 端口 \(endpoint.port)", "\(endpoint.transport.rawValue.uppercased()) port \(endpoint.port)"))
+            .accessibilityHint(L("点击在浏览器打开 \(url.absoluteString)", "Click to open \(url.absoluteString) in browser"))
         } else {
             label
                 .help(Text(verbatim: "\(endpoint.address):\(endpoint.port)"))
@@ -813,19 +878,19 @@ enum ServiceSortOrder: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .nameAscending: "名称：A 到 Z"
-        case .nameDescending: "名称：Z 到 A"
-        case .memoryDescending: "内存：高到低"
-        case .memoryAscending: "内存：低到高"
+        case .nameAscending: L("名称：A 到 Z", "Name: A to Z")
+        case .nameDescending: L("名称：Z 到 A", "Name: Z to A")
+        case .memoryDescending: L("内存：高到低", "Memory: High to Low")
+        case .memoryAscending: L("内存：低到高", "Memory: Low to High")
         }
     }
 
     var shortTitle: String {
         switch self {
-        case .nameAscending: "名称 ↑"
-        case .nameDescending: "名称 ↓"
-        case .memoryDescending: "内存 ↓"
-        case .memoryAscending: "内存 ↑"
+        case .nameAscending: L("名称 ↑", "Name ↑")
+        case .nameDescending: L("名称 ↓", "Name ↓")
+        case .memoryDescending: L("内存 ↓", "Memory ↓")
+        case .memoryAscending: L("内存 ↑", "Memory ↑")
         }
     }
 
@@ -882,7 +947,7 @@ private struct ServiceSummaryBadge: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("\(title) \(value)")
-            .accessibilityHint("点击切换到\(title)标签页")
+            .accessibilityHint(L("点击切换到\(title)标签页", "Click to switch to the \(title) tab"))
             .accessibilityAddTraits(isSelected ? [.isSelected] : [])
         } else {
             content
@@ -974,12 +1039,12 @@ private struct ServiceRow: View {
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
 
-                    RowStopButton(help: "停止服务", isBusy: isStopping, action: onStop)
+                    RowStopButton(help: L("停止服务", "Stop service"), isBusy: isStopping, action: onStop)
                 }
             }
 
             if service.endpoints.isEmpty {
-                Text("后台运行 · 无监听端口")
+                Text(L("后台运行 · 无监听端口", "Background · no listening ports"))
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             } else {
@@ -1004,7 +1069,7 @@ private struct ServiceRow: View {
             return "PID \(pids) · \(root.path)"
         }
         let executablePath = service.processes.first?.executablePath ?? ""
-        return "PID \(pids) · \(executablePath.isEmpty ? "未知命令" : executablePath)"
+        return "PID \(pids) · \(executablePath.isEmpty ? L("未知命令", "unknown command") : executablePath)"
     }
 
     private var icon: String {

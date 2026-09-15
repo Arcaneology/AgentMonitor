@@ -315,7 +315,7 @@ final class HeavyProcessTerminator: HeavyProcessTerminating {
     private func signal(_ process: HeavyProcess, signal: Int32, force: Bool) async -> StopOutcome {
         let targets = validatedMembers(process)
         guard !targets.isEmpty else {
-            return .failed("进程已退出或身份已变化。")
+            return .failed(L("进程已退出或身份已变化。", "The process has exited or changed identity."))
         }
 
         do {
@@ -324,7 +324,7 @@ final class HeavyProcessTerminator: HeavyProcessTerminating {
             }
         } catch {
             let name = signal == SIGKILL ? "SIGKILL" : "SIGTERM"
-            return .failed("发送 \(name) 失败：\(error)")
+            return .failed(L("发送 \(name) 失败：\(error)", "Failed to send \(name): \(error)"))
         }
         return await waitForExit(targets, force: force)
     }
@@ -357,7 +357,7 @@ final class HeavyProcessTerminator: HeavyProcessTerminating {
             return .stopped
         }
         return force
-            ? .failed("进程仍在运行：\(remaining.map(String.init).joined(separator: ", "))")
+            ? .failed(L("进程仍在运行：", "Processes still running: ") + remaining.map(String.init).joined(separator: ", "))
             : .requiresForce(remaining)
     }
 
@@ -440,10 +440,10 @@ final class HeavyProcessStore: ObservableObject {
 
     private func runTermination(_ process: HeavyProcess, force: Bool) async -> StopOutcome {
         guard let terminator else {
-            return .failed("关闭进程功能尚未配置。")
+            return .failed(L("关闭进程功能尚未配置。", "Process termination is not configured."))
         }
         guard terminatingIDs.insert(process.id).inserted else {
-            return .failed("该进程正在关闭。")
+            return .failed(L("该进程正在关闭。", "This process is already closing."))
         }
         defer { terminatingIDs.remove(process.id) }
 

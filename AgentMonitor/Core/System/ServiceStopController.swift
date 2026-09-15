@@ -56,7 +56,7 @@ struct ServiceStopController: ServiceStopping {
         case .success(let processes):
             if service.kind == .launchAgent {
                 guard let label = service.launchAgentLabel else {
-                    return .failed("缺少 LaunchAgent 标识，已取消停止。")
+                    return .failed(L("缺少 LaunchAgent 标识，已取消停止。", "Missing LaunchAgent label; stop cancelled."))
                 }
 
                 do {
@@ -68,10 +68,10 @@ struct ServiceStopController: ServiceStopping {
                     guard result.terminationStatus == 0 else {
                         let message = String(decoding: result.standardError, as: UTF8.self)
                             .trimmingCharacters(in: .whitespacesAndNewlines)
-                        return .failed(message.isEmpty ? "launchctl 停止失败。" : message)
+                        return .failed(message.isEmpty ? L("launchctl 停止失败。", "launchctl failed to stop the service.") : message)
                     }
                 } catch {
-                    return .failed("launchctl 停止失败：\(error)")
+                    return .failed(L("launchctl 停止失败：\(error)", "launchctl failed to stop the service: \(error)"))
                 }
             } else {
                 do {
@@ -79,7 +79,7 @@ struct ServiceStopController: ServiceStopping {
                         try processSignaler.send(signal: SIGTERM, to: process.id.pid)
                     }
                 } catch {
-                    return .failed("发送 SIGTERM 失败：\(error)")
+                    return .failed(L("发送 SIGTERM 失败：\(error)", "Failed to send SIGTERM: \(error)"))
                 }
             }
 
@@ -107,34 +107,34 @@ struct ServiceStopController: ServiceStopping {
                 try processSignaler.send(signal: SIGKILL, to: process.id.pid)
             }
         } catch {
-            return .failed("发送 SIGKILL 失败：\(error)")
+            return .failed(L("发送 SIGKILL 失败：\(error)", "Failed to send SIGKILL: \(error)"))
         }
 
         let alivePIDs = await waitForExit(matchingProcesses)
         return alivePIDs.isEmpty
             ? .stopped
-            : .failed("进程仍在运行：\(alivePIDs.map(String.init).joined(separator: ", "))")
+            : .failed(L("进程仍在运行：", "Processes still running: ") + alivePIDs.map(String.init).joined(separator: ", "))
     }
 
     private func validate(
         _ processes: [MonitoredProcess]
     ) -> Result<[MonitoredProcess], ValidationError> {
         guard !processes.isEmpty else {
-            return .failure(ValidationError(message: "没有可停止的进程。"))
+            return .failure(ValidationError(message: L("没有可停止的进程。", "No processes to stop.")))
         }
 
         for expected in processes {
             guard expected.ownerUID == ownerUID else {
-                return .failure(ValidationError(message: "进程不属于当前用户，已取消停止。"))
+                return .failure(ValidationError(message: L("进程不属于当前用户，已取消停止。", "The process does not belong to the current user; stop cancelled.")))
             }
             guard expected.id.pid != getpid() else {
-                return .failure(ValidationError(message: "不能从 Agent Monitor 中停止自身进程。"))
+                return .failure(ValidationError(message: L("不能从 Agent Monitor 中停止自身进程。", "Agent Monitor cannot stop its own process.")))
             }
             guard let current = processCollector.collect(pid: expected.id.pid) else {
-                return .failure(ValidationError(message: "进程已经退出，列表即将刷新。"))
+                return .failure(ValidationError(message: L("进程已经退出，列表即将刷新。", "The process has exited; the list will refresh shortly.")))
             }
             guard current.ownerUID == ownerUID, current.id == expected.id else {
-                return .failure(ValidationError(message: "进程状态已变化，已取消停止以避免误操作。"))
+                return .failure(ValidationError(message: L("进程状态已变化，已取消停止以避免误操作。", "The process changed; stop cancelled to avoid acting on the wrong process.")))
             }
         }
         return .success(processes)

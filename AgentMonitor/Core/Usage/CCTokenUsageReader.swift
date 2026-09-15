@@ -11,9 +11,9 @@ enum TokenUsageRange: String, CaseIterable, Identifiable, Sendable {
 
     var title: String {
         switch self {
-        case .today: "今天"
+        case .today: L("今天", "Today")
         case .last24Hours: "24h"
-        case .last30Days: "30 天"
+        case .last30Days: L("30 天", "30d")
         }
     }
 
@@ -1850,7 +1850,7 @@ final class TokenUsageStore: ObservableObject {
             }
         } catch {
             guard currentRequestID == requestID else { return }
-            errorDescription = (error as? LocalizedError)?.errorDescription ?? "无法读取 Token 用量"
+            errorDescription = (error as? LocalizedError)?.errorDescription ?? L("无法读取 Token 用量", "Unable to read token usage")
         }
     }
 
@@ -1870,14 +1870,14 @@ final class TokenUsageStore: ObservableObject {
             lastIngestAt = now
             scanDiagnostics = await database.diagnostics()
         } catch {
-            errorDescription = (error as? LocalizedError)?.errorDescription ?? "无法读取 Token 用量"
+            errorDescription = (error as? LocalizedError)?.errorDescription ?? L("无法读取 Token 用量", "Unable to read token usage")
         }
     }
 
     func syncFromCCSwitch(range: TokenUsageRange, now: Date = Date()) async {
         guard !isSyncing else { return }
         guard let database = reader as? TokenUsageDatabase else {
-            errorDescription = "当前 Token 数据源不支持 CC Switch 同步"
+            errorDescription = L("当前 Token 数据源不支持 CC Switch 同步", "The current token source does not support CC Switch sync")
             return
         }
 
@@ -1889,7 +1889,7 @@ final class TokenUsageStore: ObservableObject {
             _ = try await database.syncFromCCSwitch()
             await refresh(range: range, now: now)
         } catch {
-            errorDescription = (error as? LocalizedError)?.errorDescription ?? "无法同步 CC Switch 数据"
+            errorDescription = (error as? LocalizedError)?.errorDescription ?? L("无法同步 CC Switch 数据", "Unable to sync CC Switch data")
         }
     }
 }
@@ -1908,9 +1908,9 @@ private enum TokenUsageReadError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .openFailed:
-            "无法打开 Token 用量数据库"
+            L("无法打开 Token 用量数据库", "Unable to open the token usage database")
         case .queryFailed:
-            "无法读取 Token 用量数据"
+            L("无法读取 Token 用量数据", "Unable to read token usage data")
         }
     }
 }

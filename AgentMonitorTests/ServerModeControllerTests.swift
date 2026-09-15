@@ -3,6 +3,20 @@ import XCTest
 
 @MainActor
 final class ServerModeControllerTests: XCTestCase {
+    func testScheduleRuleTogglesBetweenDailyAndWeekdays() {
+        var rule = PowerModeSchedule.default.nightlySleep
+        XCTAssertEqual(rule.weekdays, PowerModeScheduleRule.dailyWeekdays)
+        XCTAssertTrue(rule.repeatsDaily)
+
+        rule.toggleRepeat()
+        XCTAssertEqual(rule.weekdays, PowerModeScheduleRule.workdayWeekdays)
+        XCTAssertFalse(rule.repeatsDaily)
+
+        rule.toggleRepeat()
+        XCTAssertEqual(rule.weekdays, PowerModeScheduleRule.dailyWeekdays)
+        XCTAssertTrue(rule.repeatsDaily)
+    }
+
     func testParsesSleepDisabledState() {
         XCTAssertEqual(
             ServerModeController.sleepDisabledState(from: #"    "SleepDisabled" = Yes"#),

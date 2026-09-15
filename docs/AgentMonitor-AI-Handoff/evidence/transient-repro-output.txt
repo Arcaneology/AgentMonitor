@@ -1,6 +1,0 @@
-observed=enabled, requested=server, caffeinate=true
-observed=disabled, requested=normal, caffeinate=false
-observed=enabled, requested=normal, caffeinate=false
-PASS: one injected disabled sample clears intent and stops caffeinate; the later enabled sample does not restore it.
-PASS: unknown alone does not trigger this branch.
-NOT TESTED: real AC reconnect, display blackout, IOKit readings, or the full macOS app.

@@ -47,7 +47,7 @@ struct TemperatureMonitorSection: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                ModuleTitleToggle(isExpanded: $isExpanded, title: "温度监测", systemImage: "thermometer.medium")
+                ModuleTitleToggle(isExpanded: $isExpanded, title: L("温度监测", "Temperature"), systemImage: "thermometer.medium")
 
                 Spacer()
 
@@ -68,16 +68,16 @@ struct TemperatureMonitorSection: View {
                         .foregroundStyle(.secondary)
                 }
 
-                ModuleCollapseButton(isExpanded: $isExpanded, title: "温度监测")
+                ModuleCollapseButton(isExpanded: $isExpanded, title: L("温度监测", "Temperature"))
             }
 
             if isExpanded && Self.showsHighTemperatureAlertControls {
-                Toggle("高温提示", isOn: $temperatureStore.isHighTemperatureAlertEnabled)
+                Toggle(L("高温提示", "High temperature alert"), isOn: $temperatureStore.isHighTemperatureAlertEnabled)
                     .toggleStyle(.switch)
                     .controlSize(.small)
-                    .help("开启后，温度达到 80°C 显示橙色，达到 95°C 显示红色")
+                    .help(L("开启后，温度达到 80°C 显示橙色，达到 95°C 显示红色", "When on, 80°C shows orange and 95°C shows red"))
 
-                Text("80°C 橙色 · 95°C 红色")
+                Text(L("80°C 橙色 · 95°C 红色", "80°C orange · 95°C red"))
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
@@ -98,18 +98,18 @@ private extension HeavyProcessMonitorView {
 
         return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text("全部进程")
+                Text(L("全部进程", "All Processes"))
                     .font(.subheadline.weight(.semibold))
 
                 Spacer(minLength: 8)
 
-                Text("共 \(totalProcesses) 个进程 · 按占用排序")
+                Text(L("共 \(totalProcesses) 个进程 · 按占用排序", "\(totalProcesses) processes · by usage"))
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
 
             if processes.isEmpty {
-                Text("暂无进程")
+                Text(L("暂无进程", "No processes"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -137,22 +137,22 @@ private extension HeavyProcessMonitorView {
 
     private func closeConfirmation(for process: HeavyProcess) -> some View {
         VStack(alignment: .leading, spacing: 9) {
-            Text("停止 \(process.name)？")
+            Text(L("停止 \(process.name)？", "Stop \(process.name)?"))
                 .font(.subheadline.weight(.semibold))
             Text(process.processCount == 1
-                 ? "PID \(process.pid) 将被发送 SIGTERM。"
-                 : "将结束 \(process.processCount) 个进程。")
+                 ? L("PID \(process.pid) 将被发送 SIGTERM。", "PID \(process.pid) will receive SIGTERM.")
+                 : L("将结束 \(process.processCount) 个进程。", "\(process.processCount) processes will be ended."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             HStack {
                 Spacer()
-                Button("取消") {
+                Button(L("取消", "Cancel")) {
                     processToClose = nil
                 }
                 .buttonStyle(.bordered)
 
-                Button("停止", role: .destructive) {
+                Button(L("停止", "Stop"), role: .destructive) {
                     processToClose = nil
                     Task { await close(process) }
                 }
@@ -169,20 +169,20 @@ private extension HeavyProcessMonitorView {
         switch prompt {
         case .force(let process):
             VStack(alignment: .leading, spacing: 9) {
-                Text("进程仍在运行")
+                Text(L("进程仍在运行", "Process is still running"))
                     .font(.subheadline.weight(.semibold))
-                Text("\(process.name) 未响应 SIGTERM。强制结束可能导致未保存的数据丢失。")
+                Text(L("\(process.name) 未响应 SIGTERM。强制结束可能导致未保存的数据丢失。", "\(process.name) did not respond to SIGTERM. Force quitting may lose unsaved data."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
                 HStack {
                     Spacer()
-                    Button("取消") {
+                    Button(L("取消", "Cancel")) {
                         actionPrompt = nil
                     }
                     .buttonStyle(.bordered)
 
-                    Button("强制结束", role: .destructive) {
+                    Button(L("强制结束", "Force Quit"), role: .destructive) {
                         actionPrompt = nil
                         Task { await forceClose(process) }
                     }
@@ -198,14 +198,14 @@ private extension HeavyProcessMonitorView {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.yellow)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("停止失败")
+                    Text(L("停止失败", "Stop failed"))
                         .font(.subheadline.weight(.semibold))
                     Text(message)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button("好") {
+                Button(L("好", "OK")) {
                     actionPrompt = nil
                 }
                 .buttonStyle(.bordered)
@@ -253,15 +253,15 @@ struct TemperatureMenuBarLabel: View {
 
     private var accessibilityLabel: String {
         guard let temperature = store.menuBarText else {
-            return "当前温度暂无读数"
+            return L("当前温度暂无读数", "No temperature reading")
         }
         switch store.alertLevel {
         case .none:
-            return "当前温度 \(temperature)"
+            return L("当前温度 \(temperature)", "Temperature \(temperature)")
         case .elevated:
-            return "当前温度 \(temperature)，较高"
+            return L("当前温度 \(temperature)，较高", "Temperature \(temperature), elevated")
         case .critical:
-            return "当前温度 \(temperature)，很高"
+            return L("当前温度 \(temperature)，很高", "Temperature \(temperature), critical")
         }
     }
 }
@@ -289,7 +289,7 @@ struct TemperatureChartView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("最近 1 小时")
+            Text(L("最近 1 小时", "Last hour"))
                 .font(.subheadline.weight(.semibold))
 
             chartContent
@@ -300,7 +300,7 @@ struct TemperatureChartView: View {
     @ViewBuilder
     private var chartContent: some View {
         if store.samples.isEmpty {
-            Label("暂无最近 1 小时温度记录", systemImage: "chart.xyaxis.line")
+            Label(L("暂无最近 1 小时温度记录", "No temperature records in the last hour"), systemImage: "chart.xyaxis.line")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -359,7 +359,7 @@ struct TemperatureChartView: View {
                 }
             }
         }
-        .accessibilityLabel("最近 1 小时温度曲线")
+        .accessibilityLabel(L("最近 1 小时温度曲线", "Temperature over the last hour"))
     }
 
     private var yDomain: ClosedRange<Double> {
@@ -388,7 +388,7 @@ private struct HeavyProcessRow: View {
                     .lineLimit(1)
                 Text(process.processCount == 1
                      ? "PID \(process.pid) · \(memoryText)"
-                     : "\(process.processCount) 个进程 · \(memoryText)")
+                     : L("\(process.processCount) 个进程 · \(memoryText)", "\(process.processCount) processes · \(memoryText)"))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -400,7 +400,7 @@ private struct HeavyProcessRow: View {
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
 
-            RowStopButton(help: "停止进程", isBusy: isTerminating, action: onClose)
+            RowStopButton(help: L("停止进程", "Stop process"), isBusy: isTerminating, action: onClose)
         }
         .padding(.vertical, 4)
     }

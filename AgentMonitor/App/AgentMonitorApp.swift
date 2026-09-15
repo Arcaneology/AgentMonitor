@@ -37,27 +37,6 @@ struct AgentMonitorApp: App {
     }
 
     var body: some Scene {
-        Window("Agent Monitor", id: "monitor") {
-            ScrollView {
-                MenuBarContentView(
-                    store: store,
-                    tokenUsageStore: tokenUsageStore,
-                    temperatureStore: temperatureStore,
-                    processStore: heavyProcessStore
-                )
-            }
-            .frame(width: 420)
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button("恢复菜单栏入口", systemImage: "menubar.rectangle") {
-                        restoreMenuBarItem()
-                    }
-                    .help("按你的操作重新插入 AgentMonitor 菜单栏入口")
-                }
-            }
-        }
-        .defaultSize(width: 420, height: 760)
-
         MenuBarExtra(isInserted: $isMenuBarInserted) {
             MenuBarContentView(
                 store: store,
@@ -67,21 +46,12 @@ struct AgentMonitorApp: App {
             )
         } label: {
             HStack(spacing: 5) {
-                Image(systemName: "antenna.radiowaves.left.and.right")
+                PowerModeMenuBarIcon(store: store)
                 TemperatureMenuBarLabel(store: temperatureStore)
             }
         }
         .menuBarExtraStyle(.window)
     }
-
-    private func restoreMenuBarItem() {
-        isMenuBarInserted = false
-        Task { @MainActor in
-            await Task.yield()
-            isMenuBarInserted = true
-        }
-    }
-
 }
 
 #if AGENT_MONITOR_QA

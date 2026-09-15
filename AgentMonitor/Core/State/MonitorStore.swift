@@ -217,10 +217,10 @@ final class MonitorStore: ObservableObject {
 
     func stop(_ service: MonitoredService) async -> StopOutcome {
         guard let serviceStopper else {
-            return .failed("停止服务功能尚未配置。")
+            return .failed(L("停止服务功能尚未配置。", "Service stopping is not configured."))
         }
         guard stoppingServiceIDs.insert(service.id).inserted else {
-            return .failed("该服务正在停止。")
+            return .failed(L("该服务正在停止。", "This service is already stopping."))
         }
         defer { stoppingServiceIDs.remove(service.id) }
 
@@ -233,10 +233,10 @@ final class MonitorStore: ObservableObject {
 
     func forceStop(_ service: MonitoredService) async -> StopOutcome {
         guard let serviceStopper else {
-            return .failed("停止服务功能尚未配置。")
+            return .failed(L("停止服务功能尚未配置。", "Service stopping is not configured."))
         }
         guard stoppingServiceIDs.insert(service.id).inserted else {
-            return .failed("该服务正在停止。")
+            return .failed(L("该服务正在停止。", "This service is already stopping."))
         }
         defer { stoppingServiceIDs.remove(service.id) }
 

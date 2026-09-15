@@ -64,7 +64,7 @@ struct TokenUsageChartView: View {
     /// full-width row above the chart.
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            ModuleTitleToggle(isExpanded: $isExpanded, title: "Token 用量", systemImage: "chart.bar.fill")
+            ModuleTitleToggle(isExpanded: $isExpanded, title: L("Token 用量", "Tokens"), systemImage: "chart.bar.fill")
 
             if store.supportsCCSwitchSync {
                 Button {
@@ -75,7 +75,7 @@ struct TokenUsageChartView: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(store.isSyncing)
-                .accessibilityLabel("校准 Token 数据")
+                .accessibilityLabel(L("校准 Token 数据", "Calibrate token data"))
             }
 
             Spacer(minLength: 6)
@@ -88,15 +88,15 @@ struct TokenUsageChartView: View {
                     .monospacedDigit()
                     .lineLimit(1)
                     .layoutPriority(1)
-                    .accessibilityLabel("当前筛选合计 \(TokenCountFormatter.precise(snapshot.totalTokens)) Tokens")
+                    .accessibilityLabel(L("当前筛选合计 \(TokenCountFormatter.precise(snapshot.totalTokens)) Tokens", "Filtered total \(TokenCountFormatter.precise(snapshot.totalTokens)) tokens"))
             }
 
-            ModuleCollapseButton(isExpanded: $isExpanded, title: "Token 用量")
+            ModuleCollapseButton(isExpanded: $isExpanded, title: L("Token 用量", "Tokens"))
         }
     }
 
     private var timeRangePicker: some View {
-        Picker("时间范围", selection: $range) {
+        Picker(L("时间范围", "Time range"), selection: $range) {
             ForEach(TokenUsageRange.allCases) { range in
                 Text(range.title).tag(range)
             }
@@ -105,7 +105,7 @@ struct TokenUsageChartView: View {
         .labelsHidden()
         .controlSize(.small)
         .fixedSize()
-        .accessibilityLabel("时间范围")
+        .accessibilityLabel(L("时间范围", "Time range"))
     }
 
     private var displayedSnapshot: TokenUsageSnapshot? {
@@ -131,18 +131,18 @@ struct TokenUsageChartView: View {
     private func reviewStatus(snapshot: TokenUsageSnapshot?) -> some View {
         if let summary = snapshot?.pendingReviewSummary, summary.count > 0 {
             Menu {
-                Text("待核对 \(summary.count) 条 · \(TokenCountFormatter.precise(summary.tokens)) Tokens")
+                Text(L("待核对 \(summary.count) 条 · \(TokenCountFormatter.precise(summary.tokens)) Tokens", "\(summary.count) pending review · \(TokenCountFormatter.precise(summary.tokens)) tokens"))
                     .font(.caption)
                 if !summary.reasons.isEmpty {
                     Divider()
                     ForEach(Array(summary.reasons.sorted { $0.key < $1.key }), id: \.key) { item in
-                        Text("\(item.key)：\(item.value) 条")
+                        Text(L("\(item.key)：\(item.value) 条", "\(item.key): \(item.value)"))
                     }
                 }
             } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "exclamationmark.circle")
-                    Text("待核对 \(summary.count) 条")
+                    Text(L("待核对 \(summary.count) 条", "\(summary.count) pending review"))
                     Spacer(minLength: 4)
                     Text(TokenCountFormatter.compact(summary.tokens))
                         .monospacedDigit()
@@ -152,7 +152,7 @@ struct TokenUsageChartView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .menuStyle(.borderlessButton)
-            .accessibilityLabel("待核对 \(summary.count) 条 Token，合计 \(TokenCountFormatter.precise(summary.tokens))")
+            .accessibilityLabel(L("待核对 \(summary.count) 条 Token，合计 \(TokenCountFormatter.precise(summary.tokens))", "\(summary.count) token records pending review, total \(TokenCountFormatter.precise(summary.tokens))"))
         }
     }
 
@@ -164,12 +164,12 @@ struct TokenUsageChartView: View {
                     Text("\(diagnostic.reason)：\(diagnostic.path)")
                 }
                 if store.scanDiagnostics.count > 20 {
-                    Text("还有 \(store.scanDiagnostics.count - 20) 条")
+                    Text(L("还有 \(store.scanDiagnostics.count - 20) 条", "\(store.scanDiagnostics.count - 20) more"))
                 }
             } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "doc.text.magnifyingglass")
-                    Text("扫描提示 \(store.scanDiagnostics.count) 条")
+                    Text(L("扫描提示 \(store.scanDiagnostics.count) 条", "\(store.scanDiagnostics.count) scan notices"))
                     Spacer(minLength: 4)
                 }
                 .font(.caption2)
@@ -177,7 +177,7 @@ struct TokenUsageChartView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .menuStyle(.borderlessButton)
-            .accessibilityLabel("扫描提示 \(store.scanDiagnostics.count) 条，点击查看详情")
+            .accessibilityLabel(L("扫描提示 \(store.scanDiagnostics.count) 条，点击查看详情", "\(store.scanDiagnostics.count) scan notices, click for details"))
         }
     }
 
@@ -227,14 +227,16 @@ struct TokenUsageChartView: View {
             chartMessage(errorDescription, systemImage: "externaldrive.badge.exclamationmark")
         } else if let snapshot = displayedSnapshot {
             if snapshot.totalTokens == 0 {
-                let message = filter == nil ? "该时段暂无 Token 记录" : "所选范围在该时段暂无 Token 记录"
+                let message = filter == nil
+                    ? L("该时段暂无 Token 记录", "No token records in this period")
+                    : L("所选范围在该时段暂无 Token 记录", "No token records for this selection in this period")
                 chartMessage(message, systemImage: filter == nil ? "chart.bar" : "magnifyingglass")
                     .accessibilityLabel(message)
             } else {
                 usageChart(snapshot)
             }
         } else {
-            chartMessage("正在读取本地 Token 记录", systemImage: "chart.bar")
+            chartMessage(L("正在读取本地 Token 记录", "Reading local token records"), systemImage: "chart.bar")
         }
     }
 
@@ -277,10 +279,14 @@ struct TokenUsageChartView: View {
     }
 
     private func chartAccessibilityLabel(for snapshot: TokenUsageSnapshot) -> String {
-        let modelText = selectedModelID.map { "，模型 \(TokenModelCatalog.displayName(for: $0))" }
-            ?? selectedFamily.map { "，模型系列 \($0.title)" }
-            ?? "，全部模型"
-        return "Token 用量柱状图\(modelText)，合计 \(TokenCountFormatter.precise(snapshot.totalTokens)) Tokens"
+        let modelText = selectedModelID.map { modelID in
+            let name = TokenModelCatalog.displayName(for: modelID)
+            return L("，模型 \(name)", ", model \(name)")
+        }
+            ?? selectedFamily.map { L("，模型系列 \($0.title)", ", model family \($0.title)") }
+            ?? L("，全部模型", ", all models")
+        let total = TokenCountFormatter.precise(snapshot.totalTokens)
+        return L("Token 用量柱状图\(modelText)，合计 \(total) Tokens", "Token usage bar chart\(modelText), total \(total) tokens")
     }
 
     private func chartView(
@@ -496,14 +502,14 @@ struct TokenUsageChartView: View {
                 Spacer(minLength: 2)
             }
 
-            tokenTooltipRow("输入", value: bucket.inputTokens)
-            tokenTooltipRow("缓存", value: bucket.cacheTokens)
-            tokenTooltipRow("输出", value: bucket.outputTokens)
+            tokenTooltipRow(L("输入", "Input"), value: bucket.inputTokens)
+            tokenTooltipRow(L("缓存", "Cache"), value: bucket.cacheTokens)
+            tokenTooltipRow(L("输出", "Output"), value: bucket.outputTokens)
 
             Divider()
 
             HStack {
-                Text("合计")
+                Text(L("合计", "Total"))
                 Spacer()
                 Text(TokenCountFormatter.precise(bucket.totalTokens))
                     .fontWeight(.semibold)
@@ -531,11 +537,21 @@ struct TokenUsageChartView: View {
     private func tooltipAccessibilityLabel(for bucket: TokenUsageBucket, range: TokenUsageRange) -> String {
         let selection: String
         switch filter {
-        case let .family(family): selection = "，模型系列 \(family.title)"
-        case let .model(modelID): selection = "，模型 \(TokenModelCatalog.displayName(for: modelID))"
+        case let .family(family): selection = L("，模型系列 \(family.title)", ", model family \(family.title)")
+        case let .model(modelID):
+            let name = TokenModelCatalog.displayName(for: modelID)
+            selection = L("，模型 \(name)", ", model \(name)")
         case nil: selection = ""
         }
-        return "\(tooltipTitle(for: bucket.start, range: range))\(selection)：输入 \(TokenCountFormatter.precise(bucket.inputTokens))，缓存 \(TokenCountFormatter.precise(bucket.cacheTokens))，输出 \(TokenCountFormatter.precise(bucket.outputTokens))，合计 \(TokenCountFormatter.precise(bucket.totalTokens)) Tokens"
+        let title = tooltipTitle(for: bucket.start, range: range)
+        let input = TokenCountFormatter.precise(bucket.inputTokens)
+        let cache = TokenCountFormatter.precise(bucket.cacheTokens)
+        let output = TokenCountFormatter.precise(bucket.outputTokens)
+        let total = TokenCountFormatter.precise(bucket.totalTokens)
+        return L(
+            "\(title)\(selection)：输入 \(input)，缓存 \(cache)，输出 \(output)，合计 \(total) Tokens",
+            "\(title)\(selection): input \(input), cache \(cache), output \(output), total \(total) tokens"
+        )
     }
 
     static func tooltipPosition(for location: CGPoint, in availableSize: CGSize) -> CGPoint {
@@ -722,12 +738,12 @@ private struct TokenFamilyLegend: View {
                 ) {
                     onSelect(family)
                 }
-                .accessibilityLabel("模型系列 \(family.title)")
+                .accessibilityLabel(L("模型系列 \(family.title)", "Model family \(family.title)"))
             }
         }
         .padding(.vertical, 1)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("模型系列")
+        .accessibilityLabel(L("模型系列", "Model families"))
     }
 }
 
@@ -748,12 +764,12 @@ private struct TokenModelLegend: View {
                 ) {
                     onSelect(modelID)
                 }
-                .accessibilityLabel("模型 \(metadata.name)，\(metadata.family.title)")
+                .accessibilityLabel(L("模型 \(metadata.name)，\(metadata.family.title)", "Model \(metadata.name), \(metadata.family.title)"))
             }
         }
         .padding(.vertical, 1)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("模型图例")
+        .accessibilityLabel(L("模型图例", "Model legend"))
     }
 }
 
@@ -1018,9 +1034,15 @@ enum TokenCountFormatter {
     /// Panel totals always use 亿 so the same number means the same thing in
     /// every range. Values below 万 keep plain digits because 亿 would round
     /// them all to "0.00亿".
+    /// English uses K/M/B, the conventional grouping for Western readers.
     static func compact(_ value: Int64) -> String {
         guard value >= 10_000 else { return String(value) }
-        return format(value, divisor: 100_000_000, suffix: "亿")
+        guard AppLanguage.current == .english else {
+            return format(value, divisor: 100_000_000, suffix: "亿")
+        }
+        if value >= 1_000_000_000 { return format(value, divisor: 1_000_000_000, suffix: "B") }
+        if value >= 1_000_000 { return format(value, divisor: 1_000_000, suffix: "M") }
+        return format(value, divisor: 1_000, suffix: "K")
     }
 
     /// Full precision for tooltips, with grouping but without rounding to 亿/万.
@@ -1029,8 +1051,16 @@ enum TokenCountFormatter {
     }
 
     /// Chinese unit labels for the chart's fixed 1 亿 grid.
+    /// In English the same 100M grid reads as 100M, 200M, … 1B, 1.1B.
     static func chineseUnit(_ value: Int64) -> String {
         guard value >= 100_000_000 else { return String(value) }
+        if AppLanguage.current == .english {
+            guard value >= 1_000_000_000 else { return "\(value / 1_000_000)M" }
+            let billions = Double(value) / 1_000_000_000
+            return billions.rounded() == billions
+                ? "\(Int64(billions))B"
+                : String(format: "%.1fB", billions)
+        }
         let scaled = Double(value) / 100_000_000
         if scaled.rounded() == scaled {
             return "\(Int64(scaled))亿"

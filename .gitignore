@@ -1,9 +1,18 @@
 .DS_Store
 DerivedData/
 build/
+release/
+artifacts/
+*.xcresult
+*.profdata
+*.coverage
+*.log
 *.xcuserstate
 xcuserdata/
 
-
 # Agent 本地记忆（不纳入版本库）
 .workbuddy/
+
+# 内部文档与开发过程文件（不纳入公开版本库）
+/docs/
+/CLAUDE.md

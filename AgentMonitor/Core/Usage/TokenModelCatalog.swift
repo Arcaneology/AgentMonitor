@@ -22,7 +22,7 @@ enum TokenModelFamily: String, CaseIterable, Codable, Sendable {
         case .grok: "Grok"
         case .kimi: "Kimi"
         case .deepSeek: "DeepSeek"
-        case .unknown: "未知"
+        case .unknown: L("未知", "Unknown")
         }
     }
 }
@@ -225,7 +225,7 @@ enum TokenModelCatalog {
         }
 
         let family = familyHint(for: canonicalID) ?? .unknown
-        let name = canonicalID == "unknown" ? "未知模型" : canonicalID
+        let name = canonicalID == "unknown" ? L("未知模型", "Unknown model") : canonicalID
         return TokenModelMetadata(
             id: canonicalID,
             name: name,
